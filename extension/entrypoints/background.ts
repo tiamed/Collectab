@@ -1,7 +1,7 @@
 import { CrdtSyncClient } from '@/lib/crdt-sync-port';
 
 const syncClient = new CrdtSyncClient();
-const ports = new Set<browser.runtime.Port>();
+const ports = new Set<{ postMessage: (msg: unknown) => void; onMessage: { addListener: (fn: (msg: any) => void) => void }; onDisconnect: { addListener: (fn: () => void) => void }; disconnect?: () => void }>();
 
 export default defineBackground(() => {
   browser.runtime.onInstalled.addListener(() => {
