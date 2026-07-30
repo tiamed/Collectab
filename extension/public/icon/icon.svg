@@ -49,8 +49,6 @@
     </filter>
   </defs>
 
-  <rect width="800" height="800" fill="url(#bg-grad)" rx="0" />
-
   <!-- Graphic Group -->
   <g id="document-stack" transform="translate(400, 400)">
     

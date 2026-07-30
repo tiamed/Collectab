@@ -41,7 +41,7 @@ function SortableSpaceRow({
     id: space.id,
   });
   const style = {
-    transform: CSS.Transform.toString(transform),
+    transform: CSS.Transform.toString(transform ? { x: 0, y: transform.y, scaleX: 1, scaleY: 1 } : undefined),
     transition,
     opacity: isDragging ? 0.4 : undefined,
   };
@@ -341,7 +341,7 @@ export default function Sidebar({
       {/* Space list */}
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={orderedIds} strategy={verticalListSortingStrategy}>
-          <nav className="flex-1 overflow-y-auto">
+          <nav className="flex-1 overflow-y-auto overflow-x-hidden">
             {orderedSpaces.map((space) => (
               <SortableSpaceRow
                 key={space.id}

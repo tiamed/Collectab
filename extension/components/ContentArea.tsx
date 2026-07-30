@@ -98,14 +98,20 @@ export default function ContentArea({
     setActiveId(event.active.id as string);
   }
 
-  const handleDragEnd = useCallback((event: DragEndEvent) => {
+  const dropTimerRef = useRef<ReturnType<typeof setTimeout>>();
+
+  const clearOverlay = useCallback(() => {
+    if (dropTimerRef.current) clearTimeout(dropTimerRef.current);
     setActiveId(null);
+  }, []);
+
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
-    if (!over || active.id === over.id) return;
+    if (!over || active.id === over.id) { clearOverlay(); return; }
 
     const activeData = active.data.current as { type: string; collectionId: string } | null;
     const overData = over.data.current as { type: string; collectionId: string } | null;
-    if (!activeData || !overData) return;
+    if (!activeData || !overData) { clearOverlay(); return; }
 
     if (activeData.type === 'bookmark' && overData.type === 'bookmark') {
       if (activeData.collectionId === overData.collectionId) {
@@ -116,18 +122,27 @@ export default function ContentArea({
         if (oldIndex !== -1 && newIndex !== -1) {
           onCollectionReorder(colId, arrayMove(current, oldIndex, newIndex));
         }
+        clearOverlay();
       } else {
         const targetItems = bookmarksByCollection[overData.collectionId] || [];
         const newIndex = targetItems.findIndex((b) => b.id === over.id);
         if (newIndex !== -1) {
-          onTransferBookmark(active.id as string, overData.collectionId, newIndex);
+          dropTimerRef.current = setTimeout(() => {
+            onTransferBookmark(active.id as string, overData.collectionId, newIndex);
+            setActiveId(null);
+          }, 200);
         }
       }
     } else if (activeData.type === 'bookmark' && overData.type === 'collection') {
       const targetItems = bookmarksByCollection[overData.collectionId] || [];
-      onTransferBookmark(active.id as string, overData.collectionId, targetItems.length);
+      dropTimerRef.current = setTimeout(() => {
+        onTransferBookmark(active.id as string, overData.collectionId, targetItems.length);
+        setActiveId(null);
+      }, 200);
+    } else {
+      clearOverlay();
     }
-  }, [bookmarksByCollection, onCollectionReorder, onTransferBookmark]);
+  }, [bookmarksByCollection, onCollectionReorder, onTransferBookmark, clearOverlay]);
 
   if (loading && collections.length === 0) {
     return (
