@@ -366,8 +366,10 @@ export default function App() {
       {showAuth && (
         <AuthModal onClose={() => setShowAuth(false)} onLogin={login} onRegister={register} />
       )}
-      {showMembers && activeSpaceId && (
+      {showMembers && (
         <MembersModal
+          orgId={activeOrgId}
+          orgName={orgs.find((o) => o.id === activeOrgId)?.name}
           spaceId={activeSpaceId}
           spaceName={activeSpace?.name ?? ''}
           onClose={() => setShowMembers(false)}

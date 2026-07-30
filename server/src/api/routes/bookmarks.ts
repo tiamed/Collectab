@@ -1,10 +1,26 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
-import { eq, asc, sql } from 'drizzle-orm';
+import { eq, and, asc, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { getDb } from '../../database/client.js';
-import { bookmarks, collections } from '../../database/schema.js';
+import { bookmarks, collections, spaces, organizations, orgMembers } from '../../database/schema.js';
 import { authMiddleware, type AuthEnv } from '../middleware/auth.js';
+
+async function hasCollectionAccess(db: ReturnType<typeof getDb>, collectionId: string, userId: string): Promise<boolean> {
+  const [col] = await db.select().from(collections).where(eq(collections.id, collectionId));
+  if (!col) return false;
+  if (col.ownerId === userId) return true;
+
+  const [space] = await db.select().from(spaces).where(eq(spaces.id, col.spaceId));
+  if (!space?.orgId) return false;
+
+  const [org] = await db.select().from(organizations).where(eq(organizations.id, space.orgId));
+  if (org?.ownerId === userId) return true;
+
+  const [membership] = await db.select().from(orgMembers)
+    .where(and(eq(orgMembers.orgId, space.orgId), eq(orgMembers.userId, userId)));
+  return !!membership;
+}
 
 const createSchema = z.object({
   collectionId: z.string().uuid(),
@@ -55,8 +71,7 @@ bookmarkRoutes.get('/', async (c) => {
     return c.json({ error: 'collectionId query param required' }, 400);
   }
 
-  const [col] = await db.select().from(collections).where(eq(collections.id, collectionId));
-  if (!col || col.ownerId !== userId) {
+  if (!(await hasCollectionAccess(db, collectionId, userId))) {
     return c.json({ error: 'Collection not found' }, 404);
   }
 
@@ -74,8 +89,7 @@ bookmarkRoutes.put('/reorder', zValidator('json', reorderSchema), async (c) => {
   const userId = c.get('userId');
   const { collectionId, bookmarkIds } = c.req.valid('json');
 
-  const [col] = await db.select().from(collections).where(eq(collections.id, collectionId));
-  if (!col || col.ownerId !== userId) {
+  if (!(await hasCollectionAccess(db, collectionId, userId))) {
     return c.json({ error: 'Collection not found' }, 404);
   }
 
@@ -108,8 +122,7 @@ bookmarkRoutes.post('/', zValidator('json', createSchema), async (c) => {
   const userId = c.get('userId');
   const body = c.req.valid('json');
 
-  const [col] = await db.select().from(collections).where(eq(collections.id, body.collectionId));
-  if (!col || col.ownerId !== userId) {
+  if (!(await hasCollectionAccess(db, body.collectionId, userId))) {
     return c.json({ error: 'Collection not found' }, 404);
   }
 
@@ -139,8 +152,7 @@ bookmarkRoutes.post('/batch', zValidator('json', batchCreateSchema), async (c) =
   const userId = c.get('userId');
   const body = c.req.valid('json');
 
-  const [col] = await db.select().from(collections).where(eq(collections.id, body.collectionId));
-  if (!col || col.ownerId !== userId) {
+  if (!(await hasCollectionAccess(db, body.collectionId, userId))) {
     return c.json({ error: 'Collection not found' }, 404);
   }
 
@@ -169,14 +181,12 @@ bookmarkRoutes.put('/:id', zValidator('json', updateSchema), async (c) => {
     return c.json({ error: 'Bookmark not found' }, 404);
   }
 
-  const [col] = await db.select().from(collections).where(eq(collections.id, existing.collectionId));
-  if (!col || col.ownerId !== userId) {
+  if (!(await hasCollectionAccess(db, existing.collectionId, userId))) {
     return c.json({ error: 'Bookmark not found' }, 404);
   }
 
   if (body.collectionId && body.collectionId !== existing.collectionId) {
-    const [targetCol] = await db.select().from(collections).where(eq(collections.id, body.collectionId));
-    if (!targetCol || targetCol.ownerId !== userId) {
+    if (!(await hasCollectionAccess(db, body.collectionId, userId))) {
       return c.json({ error: 'Target collection not found' }, 404);
     }
   }
@@ -204,8 +214,7 @@ bookmarkRoutes.delete('/:id', async (c) => {
     return c.json({ error: 'Bookmark not found' }, 404);
   }
 
-  const [col] = await db.select().from(collections).where(eq(collections.id, existing.collectionId));
-  if (!col || col.ownerId !== userId) {
+  if (!(await hasCollectionAccess(db, existing.collectionId, userId))) {
     return c.json({ error: 'Bookmark not found' }, 404);
   }
 

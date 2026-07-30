@@ -1,28 +1,46 @@
 import { useState, useEffect } from 'react';
 import { X, UserPlus, Crown, Trash2 } from 'lucide-react';
-import { getSpaceMembers, addSpaceMember, removeSpaceMember, updateMemberRole } from '@/lib/api';
-import type { SpaceMember } from '@/lib/api';
+import {
+  getOrgMembers,
+  addOrgMember,
+  removeOrgMember,
+  getSpaceMembers,
+  addSpaceMember,
+  removeSpaceMember,
+  updateMemberRole,
+} from '@/lib/api';
+import type { OrgMember, SpaceMember } from '@/lib/api';
 
 interface MembersModalProps {
-  spaceId: string;
+  orgId?: string | null;
+  orgName?: string;
+  spaceId: string | null;
   spaceName: string;
   onClose: () => void;
 }
 
-export default function MembersModal({ spaceId, spaceName, onClose }: MembersModalProps) {
+export default function MembersModal({ orgId, orgName, spaceId, spaceName, onClose }: MembersModalProps) {
+  const isOrgMode = !!orgId;
+
   const [owner, setOwner] = useState<{ id: string; email: string; name: string } | null>(null);
-  const [members, setMembers] = useState<SpaceMember[]>([]);
+  const [members, setMembers] = useState<(OrgMember | SpaceMember)[]>([]);
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState<'editor' | 'viewer'>('viewer');
+  const [role, setRole] = useState<string>(isOrgMode ? 'member' : 'viewer');
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchMembers = async () => {
     try {
-      const data = await getSpaceMembers(spaceId);
-      setOwner(data.owner);
-      setMembers(data.members);
+      if (isOrgMode) {
+        const data = await getOrgMembers(orgId!);
+        setOwner(data.owner);
+        setMembers(data.members);
+      } else if (spaceId) {
+        const data = await getSpaceMembers(spaceId);
+        setOwner(data.owner);
+        setMembers(data.members);
+      }
     } catch {
       // ignore
     } finally {
@@ -30,7 +48,7 @@ export default function MembersModal({ spaceId, spaceName, onClose }: MembersMod
     }
   };
 
-  useEffect(() => { fetchMembers(); }, [spaceId]);
+  useEffect(() => { fetchMembers(); }, [orgId, spaceId]);
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,7 +56,11 @@ export default function MembersModal({ spaceId, spaceName, onClose }: MembersMod
     setAdding(true);
     setError(null);
     try {
-      await addSpaceMember(spaceId, email.trim(), role);
+      if (isOrgMode) {
+        await addOrgMember(orgId!, email.trim(), role as 'admin' | 'member');
+      } else if (spaceId) {
+        await addSpaceMember(spaceId, email.trim(), role as 'editor' | 'viewer');
+      }
       setEmail('');
       fetchMembers();
     } catch (err: any) {
@@ -49,14 +71,28 @@ export default function MembersModal({ spaceId, spaceName, onClose }: MembersMod
   };
 
   const handleRemove = async (userId: string) => {
-    await removeSpaceMember(spaceId, userId);
+    if (isOrgMode) {
+      await removeOrgMember(orgId!, userId);
+    } else if (spaceId) {
+      await removeSpaceMember(spaceId, userId);
+    }
     fetchMembers();
   };
 
-  const handleRoleChange = async (userId: string, newRole: 'editor' | 'viewer') => {
-    await updateMemberRole(spaceId, userId, newRole);
+  const handleRoleChange = async (userId: string, newRole: string) => {
+    if (isOrgMode) {
+      await removeOrgMember(orgId!, userId);
+      await addOrgMember(orgId!, members.find((m) => m.userId === userId)?.email || '', newRole as 'admin' | 'member');
+    } else if (spaceId) {
+      await updateMemberRole(spaceId, userId, newRole as 'editor' | 'viewer');
+    }
     fetchMembers();
   };
+
+  const title = isOrgMode ? `Members — ${orgName}` : `Members — ${spaceName}`;
+  const roleOptions = isOrgMode
+    ? [{ value: 'member', label: 'Member' }, { value: 'admin', label: 'Admin' }]
+    : [{ value: 'viewer', label: 'Viewer' }, { value: 'editor', label: 'Editor' }];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--backdrop)]" onClick={onClose}>
@@ -65,11 +101,17 @@ export default function MembersModal({ spaceId, spaceName, onClose }: MembersMod
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-[var(--foreground)]">Members — {spaceName}</h3>
+          <h3 className="text-sm font-semibold text-[var(--foreground)]">{title}</h3>
           <button onClick={onClose} className="text-[var(--muted)] hover:text-[var(--foreground)]">
             <X className="size-4" />
           </button>
         </div>
+
+        {isOrgMode && (
+          <p className="mb-3 text-[10px] text-[var(--muted)]">
+            Org members have access to all spaces and collections within this organization.
+          </p>
+        )}
 
         {/* Add member form */}
         <form onSubmit={handleAdd} className="mb-4 flex gap-2">
@@ -82,11 +124,12 @@ export default function MembersModal({ spaceId, spaceName, onClose }: MembersMod
           />
           <select
             value={role}
-            onChange={(e) => setRole(e.target.value as 'editor' | 'viewer')}
+            onChange={(e) => setRole(e.target.value)}
             className="rounded border border-[var(--border)] bg-[var(--background)] px-2 py-2 text-xs text-[var(--foreground)] outline-none"
           >
-            <option value="viewer">Viewer</option>
-            <option value="editor">Editor</option>
+            {roleOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
           </select>
           <button
             type="submit"
@@ -136,11 +179,12 @@ export default function MembersModal({ spaceId, spaceName, onClose }: MembersMod
               <div className="flex items-center gap-2">
                 <select
                   value={member.role}
-                  onChange={(e) => handleRoleChange(member.userId, e.target.value as 'editor' | 'viewer')}
+                  onChange={(e) => handleRoleChange(member.userId, e.target.value)}
                   className="rounded border border-[var(--border)] bg-[var(--background)] px-1.5 py-0.5 text-[10px] text-[var(--muted)] outline-none"
                 >
-                  <option value="viewer">Viewer</option>
-                  <option value="editor">Editor</option>
+                  {roleOptions.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
                 </select>
                 <button
                   onClick={() => handleRemove(member.userId)}
