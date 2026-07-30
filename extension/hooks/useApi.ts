@@ -1,5 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import * as api from '@/lib/api';
+import {
+  ensureDataCacheLoaded,
+  getCachedSpaces,
+  setCachedSpaces,
+  getCachedCollections,
+  setCachedCollections,
+  getCachedBookmarks,
+  setCachedBookmarks,
+} from '@/lib/dataCache';
 
 export function useOrganizations(enabled = true) {
   const [orgs, setOrgs] = useState<api.Organization[]>([]);
@@ -28,19 +37,32 @@ export function useSpaces(orgId?: string | null, enabled = true) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const cacheKey = orgId || '__personal__';
+
   const fetch = useCallback(async () => {
     if (!enabled) return;
-    setLoading(true);
+
+    await ensureDataCacheLoaded();
+    const cached = getCachedSpaces(cacheKey);
+    if (cached) {
+      setSpaces(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+
     setError(null);
     try {
       const data = await api.getSpaces(orgId);
+      setCachedSpaces(cacheKey, data);
       setSpaces(data);
     } catch (e: any) {
       setError(e.message);
+      if (!cached) setSpaces([]);
     } finally {
       setLoading(false);
     }
-  }, [orgId, enabled]);
+  }, [orgId, enabled, cacheKey]);
 
   useEffect(() => { fetch(); }, [fetch]);
 
@@ -53,14 +75,30 @@ export function useCollections(spaceId: string | null, enabled = true) {
   const [error, setError] = useState<string | null>(null);
 
   const fetch = useCallback(async () => {
-    if (!enabled || !spaceId) { setCollections([]); return; }
-    setLoading(true);
+    if (!enabled || !spaceId) {
+      setCollections([]);
+      setLoading(false);
+      return;
+    }
+
+    await ensureDataCacheLoaded();
+    const cached = getCachedCollections(spaceId);
+    if (cached) {
+      setCollections(cached);
+      setLoading(false);
+    } else {
+      setCollections([]);
+      setLoading(true);
+    }
+
     setError(null);
     try {
       const data = await api.getCollections(spaceId);
+      setCachedCollections(spaceId, data);
       setCollections(data);
     } catch (e: any) {
       setError(e.message);
+      if (!cached) setCollections([]);
     } finally {
       setLoading(false);
     }
@@ -115,27 +153,68 @@ export function useBookmarks(collectionId: string | null) {
 export function useCollectionBookmarks(collectionIds: string[]) {
   const [data, setData] = useState<Record<string, api.Bookmark[]>>({});
   const [loading, setLoading] = useState(false);
-  const prevIdsRef = useRef<string>('');
+  const fetchGenRef = useRef(0);
 
-  const fetch = useCallback(async () => {
-    const idsKey = collectionIds.join(',');
-    if (idsKey === prevIdsRef.current && Object.keys(data).length > 0) return;
-    prevIdsRef.current = idsKey;
+  const fetch = useCallback(async (force = false) => {
+    if (collectionIds.length === 0) {
+      setData({});
+      setLoading(false);
+      return;
+    }
 
-    if (collectionIds.length === 0) { setData({}); return; }
-    setLoading(true);
+    await ensureDataCacheLoaded();
+
+    const fromCache: Record<string, api.Bookmark[]> = {};
+    const missing: string[] = [];
+    for (const id of collectionIds) {
+      const cached = getCachedBookmarks(id);
+      if (cached && !force) {
+        fromCache[id] = cached;
+      } else {
+        missing.push(id);
+      }
+    }
+
+    if (Object.keys(fromCache).length > 0) {
+      setData(() => {
+        const next: Record<string, api.Bookmark[]> = {};
+        for (const id of collectionIds) {
+          next[id] = fromCache[id] ?? getCachedBookmarks(id) ?? [];
+        }
+        return next;
+      });
+    }
+
+    const hasAnyCache = collectionIds.some((id) => !!getCachedBookmarks(id));
+    if (!hasAnyCache) setLoading(true);
+
+    const gen = ++fetchGenRef.current;
     try {
+      const toFetch = force ? collectionIds : (missing.length > 0 ? missing : collectionIds);
       const results = await Promise.all(
-        collectionIds.map(async (id) => {
+        toFetch.map(async (id) => {
           const bookmarks = await api.getBookmarks(id);
           return [id, bookmarks] as const;
         }),
       );
-      setData(Object.fromEntries(results));
+
+      if (gen !== fetchGenRef.current) return;
+
+      for (const [id, bookmarks] of results) {
+        setCachedBookmarks(id, bookmarks);
+      }
+
+      setData(() => {
+        const next: Record<string, api.Bookmark[]> = {};
+        for (const id of collectionIds) {
+          next[id] = getCachedBookmarks(id) || [];
+        }
+        return next;
+      });
     } catch {
-      // individual failures are silently ignored
+      // keep cached data on failure
     } finally {
-      setLoading(false);
+      if (gen === fetchGenRef.current) setLoading(false);
     }
   }, [collectionIds]);
 
@@ -144,6 +223,7 @@ export function useCollectionBookmarks(collectionIds: string[]) {
   const reorder = useCallback(async (collectionId: string, orderedBookmarks: api.Bookmark[]) => {
     const bookmarkIds = orderedBookmarks.map((b) => b.id);
     await api.reorderBookmarks(collectionId, bookmarkIds);
+    setCachedBookmarks(collectionId, orderedBookmarks);
     setData((prev) => ({ ...prev, [collectionId]: orderedBookmarks }));
   }, []);
 
@@ -153,11 +233,12 @@ export function useCollectionBookmarks(collectionIds: string[]) {
       const next = { ...prev };
       for (const colId of Object.keys(next)) {
         next[colId] = next[colId].filter((b) => b.id !== id);
+        setCachedBookmarks(colId, next[colId]);
       }
       const targetColId = bookmark.collectionId;
       if (!next[targetColId]) next[targetColId] = [];
-      next[targetColId].push(bookmark);
-      next[targetColId].sort((a, b) => a.orderIndex - b.orderIndex);
+      next[targetColId] = [...next[targetColId], bookmark].sort((a, b) => a.orderIndex - b.orderIndex);
+      setCachedBookmarks(targetColId, next[targetColId]);
       return next;
     });
     return bookmark;
@@ -169,6 +250,7 @@ export function useCollectionBookmarks(collectionIds: string[]) {
       const next = { ...prev };
       for (const colId of Object.keys(next)) {
         next[colId] = next[colId].filter((b) => b.id !== id);
+        setCachedBookmarks(colId, next[colId]);
       }
       return next;
     });
@@ -176,12 +258,15 @@ export function useCollectionBookmarks(collectionIds: string[]) {
 
   const add = useCallback(async (params: Parameters<typeof api.createBookmark>[0]) => {
     const bookmark = await api.createBookmark(params);
-    setData((prev) => ({
-      ...prev,
-      [params.collectionId]: [...(prev[params.collectionId] || []), bookmark],
-    }));
+    setData((prev) => {
+      const list = [...(prev[params.collectionId] || []), bookmark];
+      setCachedBookmarks(params.collectionId, list);
+      return { ...prev, [params.collectionId]: list };
+    });
     return bookmark;
   }, []);
 
-  return { data, loading, refetch: fetch, reorder, update, remove, add };
+  const refetch = useCallback(() => fetch(true), [fetch]);
+
+  return { data, loading, refetch, reorder, update, remove, add };
 }

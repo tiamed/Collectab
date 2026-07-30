@@ -95,15 +95,18 @@ export default function App() {
   const { spaces, loading: spacesLoading, refetch: refetchSpaces } = useSpaces(activeOrgId, loggedIn);
   const { collections, loading: colsLoading, refetch: refetchCollections } = useCollections(activeSpaceId, loggedIn);
 
-  // Don't auto-select org; start with "Personal" (null) by default
-
+  // Auto-select a space only after spaces have loaded — never wipe a
+  // restored selection while the list is still empty/loading.
   useEffect(() => {
-    if (spaces.length > 0 && (!activeSpaceId || !spaces.find((s) => s.id === activeSpaceId))) {
-      setActiveSpaceId(spaces[0].id);
-    } else if (spaces.length === 0) {
+    if (spacesLoading) return;
+    if (spaces.length > 0) {
+      if (!activeSpaceId || !spaces.find((s) => s.id === activeSpaceId)) {
+        setActiveSpaceId(spaces[0].id);
+      }
+    } else if (activeSpaceId) {
       setActiveSpaceId(null);
     }
-  }, [spaces, activeSpaceId]);
+  }, [spaces, spacesLoading, activeSpaceId]);
 
   const collectionIds = useMemo(() => collections.map((c) => c.id), [collections]);
   const {
@@ -345,6 +348,7 @@ export default function App() {
           onCollapseAll={() => setAllCollapsed(true)}
         />
         <ContentArea
+          spaceId={activeSpaceId}
           collections={collections}
           bookmarksByCollection={filteredBookmarks}
           loading={colsLoading || bksLoading}

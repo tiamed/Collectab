@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { X } from 'lucide-react';
+import { X, Server } from 'lucide-react';
+import { getApiBase, setApiBase } from '@/lib/api';
 import type { User } from '@/lib/api';
 
 interface AuthModalProps {
@@ -13,14 +14,23 @@ export default function AuthModal({ onClose, onLogin, onRegister }: AuthModalPro
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [serverUrl, setServerUrl] = useState(getApiBase());
+  const [showServer, setShowServer] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hint, setHint] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setHint(null);
     setLoading(true);
     try {
+      const trimmed = serverUrl.trim().replace(/\/+$/, '');
+      if (trimmed && trimmed !== getApiBase()) {
+        await setApiBase(trimmed);
+      }
+
       if (mode === 'login') {
         await onLogin(email, password);
       } else {
@@ -28,7 +38,29 @@ export default function AuthModal({ onClose, onLogin, onRegister }: AuthModalPro
       }
       onClose();
     } catch (err: any) {
-      setError(err.message);
+      const msg = err.message || 'Request failed';
+      setError(msg);
+
+      const isNetwork =
+        /failed to fetch|network|econnrefused|timeout|load failed/i.test(msg) ||
+        msg === 'Failed to fetch';
+      const isAuth =
+        /invalid|unauthorized|not found|incorrect|credentials|401|403/i.test(msg);
+
+      if (mode === 'login') {
+        if (isNetwork) {
+          setHint('Cannot reach the server. Check the Server URL below, or make sure your server is running.');
+          setShowServer(true);
+        } else if (isAuth) {
+          setHint('Wrong email or password? Or create an account if you haven\'t registered yet.');
+        } else {
+          setHint('Login failed. Check your Server URL, or register a new account.');
+          setShowServer(true);
+        }
+      } else if (isNetwork) {
+        setHint('Cannot reach the server. Check the Server URL below.');
+        setShowServer(true);
+      }
     } finally {
       setLoading(false);
     }
@@ -87,10 +119,38 @@ export default function AuthModal({ onClose, onLogin, onRegister }: AuthModalPro
               minLength={mode === 'register' ? 8 : undefined}
             />
           </div>
+
+          {/* Server URL */}
+          <div>
+            <button
+              type="button"
+              onClick={() => setShowServer(!showServer)}
+              className="mb-1 flex items-center gap-1 text-[11px] font-medium text-[var(--muted)] hover:text-[var(--foreground)]"
+            >
+              <Server className="size-3" />
+              Server URL
+              <span className="text-[9px] opacity-60">{showServer ? '▲' : '▼'}</span>
+            </button>
+            {showServer && (
+              <input
+                type="url"
+                className="w-full rounded border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-xs text-[var(--foreground)] outline-none placeholder:text-[var(--muted)] focus:ring-1 focus:ring-[var(--accent)]"
+                value={serverUrl}
+                onChange={(e) => setServerUrl(e.target.value)}
+                placeholder="http://localhost:3001/api"
+              />
+            )}
+            {!showServer && (
+              <p className="truncate text-[10px] text-[var(--muted)]">{serverUrl}</p>
+            )}
+          </div>
         </div>
 
         {error && (
-          <p className="mt-3 text-[11px] text-red-400">{error}</p>
+          <div className="mt-3 rounded border border-red-500/30 bg-red-500/10 px-3 py-2">
+            <p className="text-[11px] text-red-400">{error}</p>
+            {hint && <p className="mt-1 text-[10px] text-red-300/80">{hint}</p>}
+          </div>
         )}
 
         <button
@@ -105,14 +165,22 @@ export default function AuthModal({ onClose, onLogin, onRegister }: AuthModalPro
           {mode === 'login' ? (
             <>
               Don't have an account?{' '}
-              <button type="button" onClick={() => setMode('register')} className="text-[var(--success)] hover:underline">
+              <button
+                type="button"
+                onClick={() => { setMode('register'); setError(null); setHint(null); }}
+                className="text-[var(--success)] hover:underline"
+              >
                 Sign up
               </button>
             </>
           ) : (
             <>
               Already have an account?{' '}
-              <button type="button" onClick={() => setMode('login')} className="text-[var(--success)] hover:underline">
+              <button
+                type="button"
+                onClick={() => { setMode('login'); setError(null); setHint(null); }}
+                className="text-[var(--success)] hover:underline"
+              >
                 Sign in
               </button>
             </>

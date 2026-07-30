@@ -9,6 +9,7 @@ import DraggableBookmarkList from './DraggableBookmarkList';
 import type { Collection, Bookmark } from '@/lib/api';
 
 interface ContentAreaProps {
+  spaceId: string | null;
   collections: Collection[];
   bookmarksByCollection: Record<string, Bookmark[]>;
   loading: boolean;
@@ -24,6 +25,7 @@ interface ContentAreaProps {
 }
 
 export default function ContentArea({
+  spaceId,
   collections,
   bookmarksByCollection,
   loading,
@@ -44,8 +46,13 @@ export default function ContentArea({
   const [menuColId, setMenuColId] = useState<string | null>(null);
   const [editingColId, setEditingColId] = useState<string | null>(null);
   const [editColName, setEditColName] = useState('');
+  const scrollRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo(0, 0);
+  }, [spaceId]);
 
   useEffect(() => {
     if (allCollapsed === null) return;
@@ -162,7 +169,7 @@ export default function ContentArea({
 
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-    <div className="flex-1 overflow-y-auto px-6 py-4 space-y-8">
+    <div ref={scrollRef} className="flex-1 overflow-y-auto px-6 py-4 space-y-8">
       {collections.map((collection) => {
         const bookmarks = bookmarksByCollection[collection.id] || [];
         const isCollapsed = collapsed[collection.id] ?? false;
