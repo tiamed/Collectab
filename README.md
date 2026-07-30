@@ -33,8 +33,8 @@ A browser extension bookmark manager with organizations, spaces, collections, dr
 ### Quick Start (Docker Compose)
 
 ```bash
-# 1. Clone and start all services
-git clone <repo-url> && cd toby-like-bookmark
+# 1. Clone and start all services (pulls pre-built image from ghcr.io)
+git clone https://github.com/tiamed/Collectab.git && cd Collectab
 docker compose up -d
 
 # 2. Run database migrations
@@ -47,6 +47,19 @@ docker compose exec postgres psql -U postgres -d toby_bookmark \
 ```
 
 The server will be available at `http://localhost:3001/api`.
+
+> **Note**: `docker compose up` will pull the pre-built server image from `ghcr.io/tiamed/collectab/server:latest`. To build locally instead, use `docker compose up --build`.
+
+Or pull the server image directly:
+
+```bash
+docker pull ghcr.io/tiamed/collectab/server:latest
+docker run -p 3001:3001 \
+  -e DATABASE_URL=postgresql://postgres:postgres@host.docker.internal:5432/toby_bookmark \
+  -e JWT_SECRET=your-secret-here \
+  -e JWT_REFRESH_SECRET=your-refresh-secret-here \
+  ghcr.io/tiamed/collectab/server:latest
+```
 
 ### Configure the Extension
 
