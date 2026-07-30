@@ -67,6 +67,7 @@ export class CrdtOrderManager {
     if (id !== bookmarkId) return;
     list.delete(fromIndex, 1);
     list.insert(toIndex, bookmarkId);
+    this.doc.commit();
   }
 
   moveAcross(
@@ -83,11 +84,13 @@ export class CrdtOrderManager {
     if (id !== bookmarkId) return;
     srcList.delete(fromIndex, 1);
     dstList.insert(toIndex, bookmarkId);
+    this.doc.commit();
   }
 
   addToEnd(collectionId: string, bookmarkId: string): void {
     if (!this.doc) return;
     this.doc.getList(collectionId).push(bookmarkId);
+    this.doc.commit();
   }
 
   remove(collectionId: string, bookmarkId: string): void {
@@ -96,6 +99,7 @@ export class CrdtOrderManager {
     for (let i = 0; i < list.length; i++) {
       if ((list.get(i) as string) === bookmarkId) {
         list.delete(i, 1);
+        this.doc.commit();
         return;
       }
     }
