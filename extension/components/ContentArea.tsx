@@ -18,8 +18,8 @@ interface ContentAreaProps {
   onAddBookmark: (params: { collectionId: string; title: string; url: string; description?: string; favicon?: string; tags?: string[] }) => Promise<Bookmark>;
   onRenameCollection: (id: string, name: string) => void;
   onDeleteCollection: (id: string) => void;
-  onCollectionReorder: (collectionId: string, orderedBookmarks: Bookmark[]) => void;
-  onTransferBookmark: (bookmarkId: string, targetCollectionId: string, newIndex: number) => void;
+  onCollectionReorder: (collectionId: string, orderedBookmarks: Bookmark[], meta: { bookmarkId: string; fromIndex: number; toIndex: number }) => void;
+  onTransferBookmark: (bookmarkId: string, fromCollectionId: string, targetCollectionId: string, newIndex: number) => void;
   allCollapsed: boolean | null;
   onResetCollapsed: () => void;
 }
@@ -127,7 +127,11 @@ export default function ContentArea({
         const oldIndex = current.findIndex((b) => b.id === active.id);
         const newIndex = current.findIndex((b) => b.id === over.id);
         if (oldIndex !== -1 && newIndex !== -1) {
-          onCollectionReorder(colId, arrayMove(current, oldIndex, newIndex));
+          onCollectionReorder(colId, arrayMove(current, oldIndex, newIndex), {
+            bookmarkId: active.id as string,
+            fromIndex: oldIndex,
+            toIndex: newIndex,
+          });
         }
         clearOverlay();
       } else {
@@ -135,7 +139,7 @@ export default function ContentArea({
         const newIndex = targetItems.findIndex((b) => b.id === over.id);
         if (newIndex !== -1) {
           dropTimerRef.current = setTimeout(() => {
-            onTransferBookmark(active.id as string, overData.collectionId, newIndex);
+            onTransferBookmark(active.id as string, activeData.collectionId, overData.collectionId, newIndex);
             setActiveId(null);
           }, 200);
         }
@@ -143,7 +147,7 @@ export default function ContentArea({
     } else if (activeData.type === 'bookmark' && overData.type === 'collection') {
       const targetItems = bookmarksByCollection[overData.collectionId] || [];
       dropTimerRef.current = setTimeout(() => {
-        onTransferBookmark(active.id as string, overData.collectionId, targetItems.length);
+        onTransferBookmark(active.id as string, activeData.collectionId, overData.collectionId, targetItems.length);
         setActiveId(null);
       }, 200);
     } else {

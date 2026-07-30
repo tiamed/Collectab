@@ -227,6 +227,12 @@ export function useCollectionBookmarks(collectionIds: string[]) {
     setData((prev) => ({ ...prev, [collectionId]: orderedBookmarks }));
   }, []);
 
+  /** Optimistic local reorder without REST (CRDT path). */
+  const reorderLocal = useCallback((collectionId: string, orderedBookmarks: api.Bookmark[]) => {
+    setCachedBookmarks(collectionId, orderedBookmarks);
+    setData((prev) => ({ ...prev, [collectionId]: orderedBookmarks }));
+  }, []);
+
   const update = useCallback(async (id: string, updates: Parameters<typeof api.updateBookmark>[1]) => {
     const bookmark = await api.updateBookmark(id, updates);
     setData((prev) => {
@@ -268,5 +274,5 @@ export function useCollectionBookmarks(collectionIds: string[]) {
 
   const refetch = useCallback(() => fetch(true), [fetch]);
 
-  return { data, loading, refetch, reorder, update, remove, add };
+  return { data, loading, refetch, reorder, reorderLocal, update, remove, add };
 }

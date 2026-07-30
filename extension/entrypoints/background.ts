@@ -1,6 +1,46 @@
+import { CrdtSyncClient } from '@/lib/crdt-sync-port';
+
+const syncClient = new CrdtSyncClient();
+const ports = new Set<browser.runtime.Port>();
+
 export default defineBackground(() => {
   browser.runtime.onInstalled.addListener(() => {
     console.log('Collectab extension installed');
+  });
+
+  browser.runtime.onConnect.addListener((port) => {
+    if (port.name !== 'crdt-sync') return;
+    ports.add(port);
+
+    port.onMessage.addListener((msg) => {
+      switch (msg.type) {
+        case 'CRDT_CONNECT':
+          syncClient.connect(msg.spaceId as string, (update) => {
+            for (const p of ports) {
+              try {
+                p.postMessage({ type: 'CRDT_UPDATE', update: Array.from(update) });
+              } catch {
+                // port disconnected
+              }
+            }
+          });
+          port.postMessage({ type: 'CRDT_CONNECTED' });
+          break;
+
+        case 'CRDT_SEND':
+          syncClient.send(new Uint8Array(msg.update as number[]));
+          break;
+
+        case 'CRDT_DISCONNECT':
+          syncClient.disconnect();
+          break;
+      }
+    });
+
+    port.onDisconnect.addListener(() => {
+      ports.delete(port);
+      if (ports.size === 0) syncClient.disconnect();
+    });
   });
 
   browser.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -36,8 +76,6 @@ async function handleSaveSession(): Promise<{ success: boolean; collectionId?: s
     const now = new Date();
     const collectionName = `Session ${now.toLocaleDateString()} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 
-    // TODO: Create collection + bookmarks via Loro CRDT and sync to server
-    // For now, store in extension local storage
     const stored = await browser.storage.local.get('sessions');
     const sessions: any[] = (stored.sessions as any[]) || [];
     const newSession = {
