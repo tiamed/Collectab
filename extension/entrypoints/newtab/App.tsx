@@ -276,7 +276,7 @@ export default function App() {
     return (
       <div className="flex h-screen w-full flex-col items-center justify-center gap-4 bg-[var(--background)]">
         <div className="text-center">
-          <h1 className="mb-2 text-lg font-semibold text-[var(--foreground)]">Toby-like Bookmark</h1>
+          <h1 className="mb-2 text-lg font-semibold text-[var(--foreground)]">Collectab</h1>
           <p className="mb-4 text-xs text-[var(--muted)]">Sign in to access your bookmarks</p>
         </div>
         <button

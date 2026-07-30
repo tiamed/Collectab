@@ -7,8 +7,8 @@ export default defineConfig({
     plugins: [tailwindcss()],
   }),
   manifest: {
-    name: 'Toby-like Bookmark',
-    description: 'Bookmark manager with collections and real-time sync',
+    name: 'Collectab',
+    description: 'A Toby-like bookmark manager with organizations, collections, and real-time sync',
     permissions: ['bookmarks', 'tabs', 'storage'],
   },
 });

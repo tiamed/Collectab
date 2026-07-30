@@ -1,6 +1,6 @@
 export default defineBackground(() => {
   browser.runtime.onInstalled.addListener(() => {
-    console.log('Toby-like Bookmark extension installed');
+    console.log('Collectab extension installed');
   });
 
   browser.runtime.onMessage.addListener((message, _sender, sendResponse) => {

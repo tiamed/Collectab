@@ -1,6 +1,6 @@
-# Toby-like Bookmark Manager
+# Collectab
 
-A browser extension bookmark manager with organizations, spaces, collections, drag-drop reorder, and real-time sync.
+A Toby-like browser extension bookmark manager with organizations, spaces, collections, drag-drop reorder, and real-time sync.
 
 ## Features
 

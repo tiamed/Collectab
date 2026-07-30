@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradient -->
+    <radialGradient id="bg-grad" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#fbf9fe" />
+      <stop offset="100%" stop-color="#f2ebf8" />
+    </radialGradient>
+
+    <!-- Card Gradients -->
+    <linearGradient id="left-card-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#a86ce8" />
+      <stop offset="100%" stop-color="#8137cd" />
+    </linearGradient>
+
+    <linearGradient id="right-card-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6227a8" />
+      <stop offset="100%" stop-color="#451480" />
+    </linearGradient>
+
+    <linearGradient id="top-card-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e5d5fd" />
+      <stop offset="100%" stop-color="#cdabf9" />
+    </linearGradient>
+
+    <linearGradient id="fold-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f5ebff" />
+      <stop offset="100%" stop-color="#dac3f7" />
+    </linearGradient>
+
+    <!-- Shadow Filters -->
+    <filter id="stack-shadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="18" stdDeviation="20" flood-color="#2d0052" flood-opacity="0.28" />
+    </filter>
+
+    <filter id="top-card-shadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#220042" flood-opacity="0.24" />
+    </filter>
+
+    <filter id="fold-shadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="6" />
+      <feOffset dx="-2" dy="5" result="offsetblur" />
+      <feComponentTransfer>
+        <feFuncA type="linear" slope="0.3" />
+      </feComponentTransfer>
+      <feMerge> 
+        <feMergeNode />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="800" height="800" fill="url(#bg-grad)" rx="0" />
+
+  <!-- Graphic Group -->
+  <g id="document-stack" transform="translate(400, 400)">
+    
+    <!-- Right Dark Purple Card (Bottom) -->
+    <g transform="translate(70, 35) rotate(22)" filter="url(#stack-shadow)">
+      <path d="M -124,-200 H 124 A 36,36 0 0,1 160,-164 V 164 A 36,36 0 0,1 124,200 H -124 A 36,36 0 0,1 -160,164 V -164 A 36,36 0 0,1 -124,-200 Z" fill="url(#right-card-grad)" />
+    </g>
+
+    <!-- Left Medium Purple Card (Middle) -->
+    <g transform="translate(-70, 30) rotate(-23)" filter="url(#stack-shadow)">
+      <path d="M -124,-200 H 124 A 36,36 0 0,1 160,-164 V 164 A 36,36 0 0,1 124,200 H -124 A 36,36 0 0,1 -160,164 V -164 A 36,36 0 0,1 -124,-200 Z" fill="url(#left-card-grad)" />
+    </g>
+
+    <!-- Top Light Lavender Document Card (Top Layer) -->
+    <g transform="translate(0, -10)" filter="url(#top-card-shadow)">
+      <path d="M -124,-200 H 96 C 134.4,-200 153.6,-180.8 156.8,-168 C 158.72,-155.2 153.6,-136 160,-136 V 164 A 36,36 0 0,1 124,200 H -124 A 36,36 0 0,1 -160,164 V -164 A 36,36 0 0,1 -124,-200 Z" fill="url(#top-card-grad)" />
+
+      
+      <!-- Page Fold Ear -->
+      <g>
+        <!-- Shadow beneath the fold flap -->
+        <path d="M 98,-196 C 112,-187.2 153.6,-174.4 162,-132 C 140.8,-129.6 108.8,-142.4 98,-196 Z" fill="#2a004a" opacity="0.22" filter="blur(4px)" />
+        <!-- Folded paper flap -->
+        <path d="M 96,-200 C 112,-190.4 147.2,-180.8 156.8,-164.8 C 165.12,-152 150.4,-132.8 160,-136 C 145.92,-139.2 118.4,-143.68 103.68,-160.32 C 94.72,-175.68 96,-193.6 96,-200 Z" fill="url(#fold-grad)" />
+        <!-- Inner fold subtle highlight arc -->
+        <path d="M 96,-200 Q 140.8,-180.8 160,-136" fill="none" stroke="#ffffff" stroke-width="1.5" opacity="0.6" />
+      </g>
+      
+
+      
+    </g>
+
+  </g>
+</svg>

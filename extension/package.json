@@ -1,6 +1,6 @@
 {
-  "name": "toby-like-bookmark",
-  "description": "A Toby-like bookmark manager with real-time CRDT sync",
+  "name": "collectab",
+  "description": "A Toby-like bookmark manager with organizations, collections, and real-time sync",
   "private": true,
   "version": "0.1.0",
   "type": "module",
