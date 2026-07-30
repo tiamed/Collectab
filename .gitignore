@@ -1,0 +1,23 @@
+node_modules/
+dist/
+.output/
+.wxt/
+*.local
+.env
+
+# IDE
+.idea/
+*.swp
+*.swo
+
+#AI
+.omo
+.claude
+.codex
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+extension/web-ext-artifacts/

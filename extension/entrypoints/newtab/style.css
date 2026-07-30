@@ -1,0 +1,74 @@
+@import "tailwindcss";
+@import "@heroui/styles";
+
+@theme {
+  --color-surface: var(--surface);
+  --color-accent: var(--accent);
+  --color-accent-hover: #2563eb;
+  --color-success: var(--success);
+  --color-danger: #ef4444;
+  --color-border: var(--border);
+  --color-muted: var(--muted);
+  --color-foreground: var(--foreground);
+}
+
+@layer base {
+  :root {
+    color-scheme: light;
+    --background: #ffffff;
+    --foreground: #1f2937;
+    --muted: #6b7280;
+    --surface: #f3f4f6;
+    --surface-foreground: #1f2937;
+    --default: #f3f4f6;
+    --default-foreground: #1f2937;
+    --accent: #3b82f6;
+    --accent-foreground: #ffffff;
+    --success: #10b981;
+    --border: #e5e7eb;
+    --separator: #e5e7eb;
+    --field-background: #f9fafb;
+    --field-foreground: #1f2937;
+    --field-placeholder: #9ca3af;
+    --ring: #3b82f6;
+    --radius: 0.5rem;
+    --backdrop: rgba(0, 0, 0, 0.3);
+  }
+
+  .dark {
+    color-scheme: dark;
+    --background: #1e1e2e;
+    --foreground: #e5e7eb;
+    --muted: #9ca3af;
+    --surface: #3d3d52;
+    --surface-foreground: #e5e7eb;
+    --default: #3d3d52;
+    --default-foreground: #e5e7eb;
+    --accent: #3b82f6;
+    --accent-foreground: #ffffff;
+    --success: #6ee7b7;
+    --border: #334155;
+    --separator: #334155;
+    --field-background: #2d2d42;
+    --field-foreground: #e5e7eb;
+    --field-placeholder: #6b7280;
+    --ring: #3b82f6;
+    --radius: 0.5rem;
+    --backdrop: rgba(0, 0, 0, 0.6);
+  }
+
+  * {
+    border-color: var(--border);
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--background);
+    color: var(--foreground);
+  }
+
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(156,163,175,0.2); border-radius: 3px; }
+}
