@@ -1,4 +1,6 @@
-import { LoroDoc } from 'loro-crdt';
+// base64 entry inlines WASM — required in Chrome extensions where Vite's
+// bundler entry leaves the wasm module unset (wasm.memory → undefined).
+import { LoroDoc } from 'loro-crdt/base64';
 
 /**
  * Client-side CRDT order manager: one LoroList per collection of bookmark IDs.
@@ -34,6 +36,8 @@ export class CrdtOrderManager {
       const list = this.doc.getList(colId);
       for (const id of bmIds) list.push(id);
     }
+    // Commit before subscribe so bootstrap ops are not relayed as local updates.
+    this.doc.commit();
     this.finishInit();
   }
 
@@ -63,9 +67,18 @@ export class CrdtOrderManager {
   move(collectionId: string, bookmarkId: string, fromIndex: number, toIndex: number): void {
     if (!this.doc) return;
     const list = this.doc.getList(collectionId);
-    const id = list.get(fromIndex) as string;
-    if (id !== bookmarkId) return;
-    list.delete(fromIndex, 1);
+    let from = fromIndex;
+    if ((list.get(from) as string) !== bookmarkId) {
+      from = -1;
+      for (let i = 0; i < list.length; i++) {
+        if ((list.get(i) as string) === bookmarkId) {
+          from = i;
+          break;
+        }
+      }
+    }
+    if (from === -1) return;
+    list.delete(from, 1);
     list.insert(toIndex, bookmarkId);
     this.doc.commit();
   }

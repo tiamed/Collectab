@@ -52,6 +52,7 @@ export class ShadowDocManager {
       }
     }
 
+    doc.commit();
     this.rooms.set(spaceId, { doc, lastAccessed: Date.now() });
     return doc;
   }
@@ -117,7 +118,11 @@ export class ShadowDocManager {
   private async flushSnapshots() {
     if (!this.snapshotStore) return;
     for (const [spaceId] of this.rooms) {
-      await this.saveSingleSnapshot(spaceId);
+      try {
+        await this.saveSingleSnapshot(spaceId);
+      } catch (err) {
+        console.error(`Failed to save CRDT snapshot for space ${spaceId}:`, err);
+      }
     }
   }
 

@@ -15,6 +15,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { loadApiBase, createCollection, createSpace, createOrganization, updateOrganization, deleteOrganization, updateSpace, deleteSpace, deleteAllSpaces, updateCollection, deleteCollection } from '@/lib/api';
 import type { Bookmark } from '@/lib/api';
 import { CrdtOrderManager } from '@/lib/crdt-order-mgr';
+import { CrdtSyncClient } from '@/lib/crdt-sync-port';
 
 const STORAGE_KEY_ORG = 'active_org_id';
 const STORAGE_KEY_SPACE = 'active_space_id';
@@ -116,74 +117,74 @@ export default function App() {
     update,
     remove,
     add,
+    reorder,
     reorderLocal,
     refetch: refetchBookmarks,
   } = useCollectionBookmarks(collectionIds);
 
   const crdtOrderRef = useRef<CrdtOrderManager | null>(null);
-  const [, forceCrdtRender] = useState(0);
+  const bookmarksRef = useRef(bookmarksByCollection);
+  const collectionsRef = useRef(collections);
+  bookmarksRef.current = bookmarksByCollection;
+  collectionsRef.current = collections;
 
-  // CRDT ordering sync for active space
+  const applyCrdtOrderToUi = useCallback((mgr: CrdtOrderManager) => {
+    for (const col of collectionsRef.current) {
+      const ids = mgr.getOrderedIds(col.id);
+      if (ids.length === 0) continue;
+      const current = bookmarksRef.current[col.id] || [];
+      const byId = new Map(current.map((b) => [b.id, b]));
+      const ordered = ids.map((id) => byId.get(id)).filter(Boolean) as Bookmark[];
+      if (ordered.length > 0) reorderLocal(col.id, ordered);
+    }
+  }, [reorderLocal]);
+
+  // CRDT WS lives in the newtab page (not MV3 SW) — Port to background often fails with
+  // "Receiving end does not exist" when the service worker is asleep/unloaded.
   useEffect(() => {
     if (!activeSpaceId || !loggedIn) return;
 
     const mgr = new CrdtOrderManager();
+    const client = new CrdtSyncClient();
     crdtOrderRef.current = mgr;
 
-    const port = browser.runtime.connect({ name: 'crdt-sync' });
-    port.postMessage({ type: 'CRDT_CONNECT', spaceId: activeSpaceId });
-
     mgr.init(activeSpaceId, (updateBytes) => {
-      port.postMessage({ type: 'CRDT_SEND', update: Array.from(updateBytes) });
+      client.send(updateBytes);
     });
 
-    const restData: Record<string, string[]> = {};
-    for (const col of collections) {
-      restData[col.id] = (bookmarksByCollection[col.id] || []).map((b) => b.id);
-    }
-
-    const timeoutId = setTimeout(() => {
-      if (!mgr.isReady) mgr.bootstrapFromREST(restData);
-    }, 3000);
-
-    const onMessage = (msg: { type: string; update?: number[] }) => {
-      if (msg.type !== 'CRDT_UPDATE' || !msg.update) return;
-      const updateBytes = new Uint8Array(msg.update);
+    client.connect(activeSpaceId, (updateBytes) => {
       if (!mgr.isReady) {
-        clearTimeout(timeoutId);
         mgr.bootstrapWithSnapshot(updateBytes);
       } else {
         mgr.applyRemoteUpdate(updateBytes);
       }
-      // Reorder local UI from CRDT lists when ready
-      if (mgr.isReady) {
-        for (const col of collections) {
-          const ids = mgr.getOrderedIds(col.id);
-          if (ids.length === 0) continue;
-          const current = bookmarksByCollection[col.id] || [];
-          const byId = new Map(current.map((b) => [b.id, b]));
-          const ordered = ids.map((id) => byId.get(id)).filter(Boolean) as Bookmark[];
-          if (ordered.length > 0) reorderLocal(col.id, ordered);
-        }
-        forceCrdtRender((n) => n + 1);
-      }
-    };
-    port.onMessage.addListener(onMessage);
+      if (mgr.isReady) applyCrdtOrderToUi(mgr);
+    });
 
     return () => {
-      clearTimeout(timeoutId);
       mgr.destroy();
-      try {
-        port.postMessage({ type: 'CRDT_DISCONNECT' });
-        port.disconnect();
-      } catch {
-        // ignore
-      }
+      client.disconnect();
       crdtOrderRef.current = null;
     };
-    // Intentionally only re-init on space / login change; collections snapshot at connect time is enough for REST fallback
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSpaceId, loggedIn]);
+  }, [activeSpaceId, loggedIn, applyCrdtOrderToUi]);
+
+  // REST bootstrap only after bookmarks are loaded (avoid empty CRDT lists that break move()).
+  useEffect(() => {
+    if (!activeSpaceId || !loggedIn || bksLoading) return;
+    const mgr = crdtOrderRef.current;
+    if (!mgr || mgr.isReady) return;
+
+    const timeoutId = setTimeout(() => {
+      if (mgr.isReady) return;
+      const restData: Record<string, string[]> = {};
+      for (const col of collectionsRef.current) {
+        restData[col.id] = (bookmarksRef.current[col.id] || []).map((b) => b.id);
+      }
+      mgr.bootstrapFromREST(restData);
+    }, 1500);
+
+    return () => clearTimeout(timeoutId);
+  }, [activeSpaceId, loggedIn, bksLoading, collectionIds, bookmarksByCollection]);
 
   const activeSpace = spaces.find((s) => s.id === activeSpaceId);
 
@@ -309,8 +310,11 @@ export default function App() {
     const mgr = crdtOrderRef.current;
     if (mgr?.isReady) {
       mgr.move(collectionId, meta.bookmarkId, meta.fromIndex, meta.toIndex);
+    } else {
+      // Persist via REST until CRDT is ready (WS snapshot / REST bootstrap).
+      void reorder(collectionId, orderedBookmarks);
     }
-  }, [reorderLocal]);
+  }, [reorderLocal, reorder]);
 
   const handleTransferBookmark = useCallback(async (
     bookmarkId: string,

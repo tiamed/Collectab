@@ -18,114 +18,124 @@ import { ShadowDocManager } from './server/shadow-doc-manager.js';
 import { SnapshotStore } from './server/snapshot-store.js';
 import { SyncBatcher } from './server/sync-batcher.js';
 import { getPool } from './database/client.js';
+import { runMigrations } from './database/migrate.js';
 import { getEnv } from './config/env.js';
 
-const env = getEnv();
-const app = new Hono();
+async function main() {
+  await runMigrations();
 
-const snapshotStore = new SnapshotStore();
-const shadowDocManager = new ShadowDocManager();
-const syncBatcher = new SyncBatcher(shadowDocManager);
-const roomManager = new WsRelayManager(shadowDocManager, syncBatcher);
-shadowDocManager.startAutoSnapshot(snapshotStore);
+  const env = getEnv();
+  const app = new Hono();
 
-setInterval(() => shadowDocManager.cleanStaleRooms(), 60 * 60 * 1000);
+  const snapshotStore = new SnapshotStore();
+  const shadowDocManager = new ShadowDocManager();
+  const syncBatcher = new SyncBatcher(shadowDocManager);
+  const roomManager = new WsRelayManager(shadowDocManager, syncBatcher);
+  shadowDocManager.startAutoSnapshot(snapshotStore);
 
-app.use('*', logger());
-app.use('*', cors({ origin: env.CORS_ORIGIN }));
+  setInterval(() => shadowDocManager.cleanStaleRooms(), 60 * 60 * 1000);
 
-app.get('/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }));
+  app.use('*', logger());
+  app.use('*', cors({ origin: env.CORS_ORIGIN }));
 
-app.route('/api/auth', authRoutes);
-app.route('/api/spaces', spaceRoutes);
-app.route('/api/collections', collectionRoutes);
-app.route('/api/bookmarks', bookmarkRoutes);
-app.route('/api/search', searchRoutes);
-app.route('/api/import', importRoutes);
-app.route('/api/members', memberRoutes);
-app.route('/api/orgs', orgRoutes);
+  app.get('/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
-const server = serve({ fetch: app.fetch, port: env.PORT }, (info) => {
-  console.log(`Server running on http://localhost:${info.port}`);
-});
+  app.route('/api/auth', authRoutes);
+  app.route('/api/spaces', spaceRoutes);
+  app.route('/api/collections', collectionRoutes);
+  app.route('/api/bookmarks', bookmarkRoutes);
+  app.route('/api/search', searchRoutes);
+  app.route('/api/import', importRoutes);
+  app.route('/api/members', memberRoutes);
+  app.route('/api/orgs', orgRoutes);
 
-const wss = new WebSocketServer({ noServer: true });
+  const server = serve({ fetch: app.fetch, port: env.PORT }, (info) => {
+    console.log(`Server running on http://localhost:${info.port}`);
+  });
 
-async function hasSpaceAccess(userId: string, spaceId: string): Promise<boolean> {
-  const pool = getPool();
-  const r = await pool.query(
-    `SELECT 1 FROM spaces s
-     LEFT JOIN space_members sm ON sm.space_id = s.id AND sm.user_id = $2
-     LEFT JOIN org_members om ON om.org_id = s.org_id AND om.user_id = $2
-     WHERE s.id = $1
-       AND (s.owner_id = $2 OR sm.user_id = $2 OR om.user_id = $2
-            OR s.org_id IN (SELECT id FROM organizations WHERE owner_id = $2))`,
-    [spaceId, userId],
-  );
-  return r.rows.length > 0;
+  const wss = new WebSocketServer({ noServer: true });
+
+  async function hasSpaceAccess(userId: string, spaceId: string): Promise<boolean> {
+    const pool = getPool();
+    const r = await pool.query(
+      `SELECT 1 FROM spaces s
+       LEFT JOIN space_members sm ON sm.space_id = s.id AND sm.user_id = $2
+       LEFT JOIN org_members om ON om.org_id = s.org_id AND om.user_id = $2
+       WHERE s.id = $1
+         AND (s.owner_id = $2 OR sm.user_id = $2 OR om.user_id = $2
+              OR s.org_id IN (SELECT id FROM organizations WHERE owner_id = $2))`,
+      [spaceId, userId],
+    );
+    return r.rows.length > 0;
+  }
+
+  (server as any).on('upgrade', (request: any, socket: any, head: any) => {
+    void (async () => {
+      try {
+        const url = new URL(request.url || '', `http://${request.headers.host}`);
+        const match = url.pathname.match(/^\/ws\/space\/(.+)$/);
+        if (!match) {
+          socket.destroy();
+          return;
+        }
+
+        const spaceId = match[1];
+        const token = url.searchParams.get('token');
+        if (!token) {
+          socket.destroy();
+          return;
+        }
+
+        let userId: string;
+        try {
+          const payload = jwt.verify(token, env.JWT_SECRET) as { sub: string };
+          userId = payload.sub;
+        } catch {
+          socket.destroy();
+          return;
+        }
+
+        if (!(await hasSpaceAccess(userId, spaceId))) {
+          socket.destroy();
+          return;
+        }
+
+        wss.handleUpgrade(request, socket, head, (ws) => {
+          void (async () => {
+            roomManager.addClient(spaceId, ws);
+
+            try {
+              const snapshot = await roomManager.ensureRoomReady(spaceId);
+              if (snapshot) ws.send(snapshot);
+            } catch (err) {
+              console.error(`Failed to prepare CRDT room ${spaceId}:`, err);
+            }
+
+            ws.on('message', (data: Buffer | ArrayBuffer | Buffer[]) => {
+              const buf = Buffer.isBuffer(data) ? data : Buffer.from(data as ArrayBuffer);
+              void roomManager.handleUpdate(spaceId, new Uint8Array(buf), ws).catch((err) => {
+                console.error(`CRDT update failed for space ${spaceId}:`, err);
+              });
+            });
+
+            ws.on('close', () => roomManager.removeClient(spaceId, ws));
+            ws.on('error', (err) => {
+              console.error(`WebSocket error in space ${spaceId}:`, err.message);
+              roomManager.removeClient(spaceId, ws);
+            });
+          })();
+        });
+      } catch (err) {
+        console.error('WebSocket upgrade error:', err);
+        socket.destroy();
+      }
+    })();
+  });
+
+  console.log(`WebSocket ready on ws://localhost:${env.PORT}/ws/space/:id`);
 }
 
-(server as any).on('upgrade', (request: any, socket: any, head: any) => {
-  void (async () => {
-    try {
-      const url = new URL(request.url || '', `http://${request.headers.host}`);
-      const match = url.pathname.match(/^\/ws\/space\/(.+)$/);
-      if (!match) {
-        socket.destroy();
-        return;
-      }
-
-      const spaceId = match[1];
-      const token = url.searchParams.get('token');
-      if (!token) {
-        socket.destroy();
-        return;
-      }
-
-      let userId: string;
-      try {
-        const payload = jwt.verify(token, env.JWT_SECRET) as { sub: string };
-        userId = payload.sub;
-      } catch {
-        socket.destroy();
-        return;
-      }
-
-      if (!(await hasSpaceAccess(userId, spaceId))) {
-        socket.destroy();
-        return;
-      }
-
-      wss.handleUpgrade(request, socket, head, (ws) => {
-        void (async () => {
-          roomManager.addClient(spaceId, ws);
-
-          try {
-            const snapshot = await roomManager.ensureRoomReady(spaceId);
-            if (snapshot) ws.send(snapshot);
-          } catch (err) {
-            console.error(`Failed to prepare CRDT room ${spaceId}:`, err);
-          }
-
-          ws.on('message', (data: Buffer | ArrayBuffer | Buffer[]) => {
-            const buf = Buffer.isBuffer(data) ? data : Buffer.from(data as ArrayBuffer);
-            void roomManager.handleUpdate(spaceId, new Uint8Array(buf), ws).catch((err) => {
-              console.error(`CRDT update failed for space ${spaceId}:`, err);
-            });
-          });
-
-          ws.on('close', () => roomManager.removeClient(spaceId, ws));
-          ws.on('error', (err) => {
-            console.error(`WebSocket error in space ${spaceId}:`, err.message);
-            roomManager.removeClient(spaceId, ws);
-          });
-        })();
-      });
-    } catch (err) {
-      console.error('WebSocket upgrade error:', err);
-      socket.destroy();
-    }
-  })();
+main().catch((err) => {
+  console.error('Failed to start server:', err);
+  process.exit(1);
 });
-
-console.log(`WebSocket ready on ws://localhost:${env.PORT}/ws/space/:id`);
