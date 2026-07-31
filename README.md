@@ -15,7 +15,7 @@ A Toby-like browser extension bookmark manager with organizations, spaces, colle
 ## Structure
 
 ```
-├── extension/          # WXT browser extension (React + HeroUI + Tailwind)
+├── extension/          # WXT browser extension (React + Tailwind)
 │   ├── entrypoints/
 │   │   └── newtab/     # Main UI — new tab override
 │   ├── components/
@@ -170,6 +170,6 @@ git push origin v0.1.0
 
 ## Tech Stack
 
-- **Extension**: WXT + React 19 + HeroUI v3 + Tailwind CSS v4 + Lucide icons
+- **Extension**: WXT + React 19 + Tailwind CSS v4 + Lucide icons
 - **Server**: Hono + PostgreSQL + Drizzle ORM + JWT auth
 - **Drag & Drop**: @dnd-kit/core + @dnd-kit/sortable
