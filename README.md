@@ -30,7 +30,7 @@ A Toby-like browser extension bookmark manager with organizations, spaces, colle
 
 ## Self-Deployment
 
-PostgreSQL is **required**. Redis in `docker-compose.yml` is optional for this stack (compose starts it for convenience).
+PostgreSQL is **required**.
 
 ### Option A — Docker Compose (recommended)
 
@@ -39,7 +39,7 @@ git clone https://github.com/tiamed/Collectab.git && cd Collectab
 docker compose up -d
 ```
 
-This starts **PostgreSQL**, Redis, and the API server. The server applies SQL migrations automatically on startup.
+This starts **PostgreSQL** and the API server. The server applies SQL migrations automatically on startup.
 
 API: `http://localhost:3001/api`  
 Postgres (host): `localhost:5432` — database `collectab`, user/password `postgres` / `postgres` (override with `POSTGRES_PASSWORD`).
