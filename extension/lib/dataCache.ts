@@ -1,4 +1,4 @@
-import type { Space, Collection, Bookmark } from './api';
+import type { Space, Collection, Bookmark, User, Organization } from './api';
 
 const CACHE_KEY = 'data_cache_v2';
 const MAX_SPACES = 12;
@@ -15,6 +15,8 @@ interface CacheEntry<T> {
 export type SpaceBookmarks = Record<string, Bookmark[]>;
 
 interface DataCache {
+  user: CacheEntry<User> | null;
+  organizations: CacheEntry<Organization[]> | null;
   spaces: Record<string, CacheEntry<Space[]>>;
   collections: Record<string, CacheEntry<Collection[]>>;
   /** Keyed by spaceId — matches GET /bookmarks?spaceId= */
@@ -22,6 +24,8 @@ interface DataCache {
 }
 
 const emptyCache = (): DataCache => ({
+  user: null,
+  organizations: null,
   spaces: {},
   collections: {},
   bookmarksBySpace: {},
@@ -121,6 +125,24 @@ export async function ensureDataCacheLoaded() {
     }
   })();
   return loadPromise;
+}
+
+export function getCachedUser(): User | null {
+  return memory.user?.data ?? null;
+}
+
+export function setCachedUser(user: User | null) {
+  memory.user = user ? { data: user, updatedAt: Date.now() } : null;
+  scheduleSave(true);
+}
+
+export function getCachedOrganizations(): Organization[] | null {
+  return memory.organizations?.data ?? null;
+}
+
+export function setCachedOrganizations(data: Organization[]) {
+  memory.organizations = { data, updatedAt: Date.now() };
+  scheduleSave();
 }
 
 export function getCachedSpaces(orgKey: string): Space[] | null {

@@ -12,10 +12,11 @@ import DeleteOrgModal from '@/components/DeleteOrgModal';
 import { useOrganizations, useSpaces, useCollections, useCollectionBookmarks } from '@/hooks/useApi';
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/useTheme';
-import { loadApiBase, createCollection, createSpace, createOrganization, updateOrganization, deleteOrganization, updateSpace, deleteSpace, deleteAllSpaces, updateCollection, deleteCollection } from '@/lib/api';
-import type { Bookmark } from '@/lib/api';
+import { loadApiBase, isLoggedIn, createCollection, createSpace, createOrganization, updateOrganization, deleteOrganization, updateSpace, deleteSpace, deleteAllSpaces, updateCollection, deleteCollection } from '@/lib/api';
+import type { Bookmark, User } from '@/lib/api';
 import { CrdtOrderManager } from '@/lib/crdt-order-mgr';
 import { CrdtSyncClient } from '@/lib/crdt-sync-port';
+import { ensureDataCacheLoaded, getCachedUser } from '@/lib/dataCache';
 
 const STORAGE_KEY_ORG = 'active_org_id';
 const STORAGE_KEY_SPACE = 'active_space_id';
@@ -23,6 +24,7 @@ const STORAGE_KEY_PERSONAL_NAME = 'personal_org_name';
 
 export default function App() {
   const [ready, setReady] = useState(false);
+  const [bootUser, setBootUser] = useState<User | null>(null);
   const [activeOrgId, setActiveOrgIdRaw] = useState<string | null>(null);
   const [activeSpaceId, setActiveSpaceIdRaw] = useState<string | null>(null);
 
@@ -80,19 +82,22 @@ export default function App() {
   useEffect(() => {
     Promise.all([
       loadApiBase(),
+      ensureDataCacheLoaded(),
       chrome.storage.local.get([STORAGE_KEY_ORG, STORAGE_KEY_SPACE, STORAGE_KEY_PERSONAL_NAME]),
-    ]).then(([, stored]) => {
+    ]).then(([, , stored]) => {
       if (stored[STORAGE_KEY_ORG]) setActiveOrgIdRaw(stored[STORAGE_KEY_ORG]);
       if (stored[STORAGE_KEY_SPACE]) setActiveSpaceIdRaw(stored[STORAGE_KEY_SPACE]);
       if (stored[STORAGE_KEY_PERSONAL_NAME]) setPersonalNameRaw(stored[STORAGE_KEY_PERSONAL_NAME]);
+      if (isLoggedIn()) setBootUser(getCachedUser());
       setReady(true);
     });
   }, []);
 
-  const { user, loading: authLoading, login, register, logout } = useAuth(ready);
+  const { user, loading: authLoading, login, register, logout } = useAuth(ready, bootUser);
   const { theme, toggle: toggleTheme } = useTheme();
 
-  const loggedIn = !!user;
+  const sessionUser = user ?? bootUser;
+  const loggedIn = !!sessionUser;
   const { orgs, loading: orgsLoading, refetch: refetchOrgs } = useOrganizations(loggedIn);
   const { spaces, loading: spacesLoading, refetch: refetchSpaces } = useSpaces(activeOrgId, loggedIn);
   const { collections, loading: colsLoading, refetch: refetchCollections } = useCollections(activeSpaceId, loggedIn);
@@ -386,7 +391,7 @@ export default function App() {
     setActiveSpaceId(null);
   }, [refetchOrgs, refetchSpaces]);
 
-  if (!ready || authLoading) {
+  if (!ready || (authLoading && !sessionUser)) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-[var(--background)]">
         <span className="text-sm text-[var(--muted)]">Loading...</span>
@@ -394,7 +399,7 @@ export default function App() {
     );
   }
 
-  if (!user) {
+  if (!sessionUser) {
     return (
       <div className="flex h-screen w-full flex-col items-center justify-center gap-4 bg-[var(--background)]">
         <div className="text-center">
@@ -450,7 +455,7 @@ export default function App() {
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         onOpenSettings={() => setShowSettings(true)}
-        user={user}
+        user={sessionUser}
         onAccountClick={() => setShowAuth(true)}
         onLogout={handleLogout}
         theme={theme}

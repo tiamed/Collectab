@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import * as api from '@/lib/api';
 import {
   ensureDataCacheLoaded,
+  getCachedOrganizations,
+  setCachedOrganizations,
   getCachedSpaces,
   setCachedSpaces,
   getCachedCollections,
@@ -17,18 +19,28 @@ export function useOrganizations(enabled = true) {
 
   const fetch = useCallback(async () => {
     if (!enabled) return;
-    setLoading(true);
+
+    await ensureDataCacheLoaded();
+    const cached = getCachedOrganizations();
+    if (cached) {
+      setOrgs(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+
     try {
       const data = await api.getOrganizations();
+      setCachedOrganizations(data);
       setOrgs(data);
     } catch {
-      // ignore
+      // keep cache
     } finally {
       setLoading(false);
     }
   }, [enabled]);
 
-  useEffect(() => { fetch(); }, [fetch]);
+  useEffect(() => { void fetch(); }, [fetch]);
 
   return { orgs, loading, refetch: fetch };
 }
