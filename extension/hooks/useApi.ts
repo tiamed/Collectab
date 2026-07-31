@@ -12,6 +12,7 @@ import {
   setCachedBookmarksBySpace,
   setCachedBookmarksForCollection,
 } from '@/lib/dataCache';
+import { subscribeBookmarksChanged } from '@/lib/bookmarksSync';
 
 export function useOrganizations(enabled = true) {
   const [orgs, setOrgs] = useState<api.Organization[]>([]);
@@ -206,6 +207,44 @@ export function useCollectionBookmarks(spaceId: string | null) {
   useEffect(() => {
     void fetch();
   }, [fetch]);
+
+  useEffect(() => {
+    void fetch();
+  }, [fetch]);
+
+  // Popup (and other pages) signal via chrome.storage — refetch when relevant.
+  // Hidden newtabs defer the fetch until they become visible again.
+  useEffect(() => {
+    let pending = false;
+
+    const refreshIfNeeded = () => {
+      if (!spaceId) return;
+      pending = false;
+      void fetch(true);
+    };
+
+    const unsub = subscribeBookmarksChanged((event) => {
+      if (!spaceId) return;
+      if (event.spaceId && event.spaceId !== spaceId) return;
+      if (typeof document !== 'undefined' && document.hidden) {
+        pending = true;
+        return;
+      }
+      refreshIfNeeded();
+    });
+
+    const onVisibility = () => {
+      if (typeof document !== 'undefined' && !document.hidden && pending) {
+        refreshIfNeeded();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+
+    return () => {
+      unsub();
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [spaceId, fetch]);
 
   const reorder = useCallback(async (collectionId: string, orderedBookmarks: api.Bookmark[]) => {
     if (!spaceId) return;

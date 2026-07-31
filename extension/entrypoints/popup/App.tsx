@@ -12,6 +12,7 @@ import {
 } from '@/lib/api';
 import FaviconField from '@/components/FaviconField';
 import { resolveFaviconUrl } from '@/lib/favicon';
+import { notifyBookmarksChanged } from '@/lib/bookmarksSync';
 
 const STORAGE_KEY_ORG = 'active_org_id';
 const STORAGE_KEY_LAST_COLLECTION = 'popup_last_collection';
@@ -123,6 +124,10 @@ export default function App() {
         title: title.trim() || url,
         url: url.trim(),
         favicon: favicon || undefined,
+      });
+      await notifyBookmarksChanged({
+        spaceId: selectedSpaceId,
+        collectionId: selectedCollectionId,
       });
       await chrome.storage.local.set({ [STORAGE_KEY_LAST_COLLECTION]: selectedCollectionId });
       setSaved(true);
