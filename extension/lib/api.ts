@@ -1,6 +1,14 @@
+import { clearDataCache } from './dataCache';
+
 const STORAGE_KEY_BASE_URL = 'api_base_url';
 const STORAGE_KEY_ACCESS_TOKEN = 'access_token';
 const STORAGE_KEY_REFRESH_TOKEN = 'refresh_token';
+const SESSION_UI_KEYS = [
+  'active_org_id',
+  'active_space_id',
+  'popup_last_collection',
+  'personal_org_name',
+] as const;
 const DEFAULT_API_BASE = 'http://localhost:3001/api';
 
 let apiBase: string = DEFAULT_API_BASE;
@@ -20,9 +28,23 @@ export async function loadApiBase() {
   }
 }
 
-export async function setApiBase(url: string) {
-  apiBase = url.replace(/\/+$/, '');
+/**
+ * Update API base URL. When the URL changes, clear auth tokens, data cache,
+ * and UI selection so the previous server's orgs/spaces cannot linger.
+ */
+export async function setApiBase(url: string): Promise<{ changed: boolean }> {
+  const next = url.replace(/\/+$/, '');
+  const changed = next !== apiBase;
+  apiBase = next;
   await chrome.storage.local.set({ [STORAGE_KEY_BASE_URL]: apiBase });
+
+  if (changed) {
+    await clearTokens();
+    await clearDataCache();
+    await chrome.storage.local.remove([...SESSION_UI_KEYS]);
+  }
+
+  return { changed };
 }
 
 export function getApiBase() {

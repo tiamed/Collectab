@@ -5,12 +5,14 @@ import { getApiBase, setApiBase, importFromNiceTab, importFromToby, importNative
 interface SettingsModalProps {
   onClose: () => void;
   onImportDone?: () => void;
+  /** Called after API base URL actually changes (session already cleared). */
+  onServerChanged?: () => void;
   activeOrgId?: string | null;
   activeOrgName?: string;
   onDeleteAllSpaces?: () => void;
 }
 
-export default function SettingsModal({ onClose, onImportDone, activeOrgId, activeOrgName = 'Personal', onDeleteAllSpaces }: SettingsModalProps) {
+export default function SettingsModal({ onClose, onImportDone, onServerChanged, activeOrgId, activeOrgName = 'Personal', onDeleteAllSpaces }: SettingsModalProps) {
   const [serverUrl, setServerUrl] = useState(getApiBase());
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
@@ -28,10 +30,15 @@ export default function SettingsModal({ onClose, onImportDone, activeOrgId, acti
     setSaving(true);
     setStatus('idle');
     try {
-      await setApiBase(serverUrl.trim());
-      const res = await fetch(serverUrl.trim().replace(/\/api$/, '') + '/health');
+      const trimmed = serverUrl.trim().replace(/\/+$/, '');
+      const { changed } = await setApiBase(trimmed);
+      const res = await fetch(trimmed.replace(/\/api$/, '') + '/health');
       if (res.ok) {
         setStatus('success');
+        if (changed) {
+          onServerChanged?.();
+          return;
+        }
       } else {
         setStatus('error');
       }

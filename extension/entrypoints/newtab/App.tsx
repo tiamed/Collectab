@@ -131,11 +131,18 @@ export default function App() {
   const applyCrdtOrderToUi = useCallback((mgr: CrdtOrderManager) => {
     for (const col of collectionsRef.current) {
       const ids = mgr.getOrderedIds(col.id);
-      if (ids.length === 0) continue;
       const current = bookmarksRef.current[col.id] || [];
+      if (ids.length === 0 && current.length === 0) continue;
       const byId = new Map(current.map((b) => [b.id, b]));
       const ordered = ids.map((id) => byId.get(id)).filter(Boolean) as Bookmark[];
-      if (ordered.length > 0) reorderLocal(col.id, ordered);
+      const seen = new Set(ordered.map((b) => b.id));
+      // Keep REST-created bookmarks that CRDT has not caught up with yet
+      const extras = current.filter((b) => !seen.has(b.id));
+      for (const b of extras) {
+        if (mgr.isReady) mgr.addToEnd(col.id, b.id);
+      }
+      const merged = [...ordered, ...extras];
+      if (merged.length > 0) reorderLocal(col.id, merged);
     }
   }, [reorderLocal]);
 
@@ -411,7 +418,12 @@ export default function App() {
           <AuthModal onClose={() => setShowAuth(false)} onLogin={login} onRegister={register} />
         )}
         {showSettings && (
-          <SettingsModal onClose={() => setShowSettings(false)} onImportDone={handleImportDone} activeOrgId={activeOrgId} />
+          <SettingsModal
+            onClose={() => setShowSettings(false)}
+            onImportDone={handleImportDone}
+            onServerChanged={() => { window.location.reload(); }}
+            activeOrgId={activeOrgId}
+          />
         )}
       </div>
     );
@@ -477,7 +489,14 @@ export default function App() {
       </main>
 
       {showSettings && (
-        <SettingsModal onClose={() => setShowSettings(false)} onImportDone={handleImportDone} activeOrgId={activeOrgId} activeOrgName={orgs.find((o) => o.id === activeOrgId)?.name ?? personalName} onDeleteAllSpaces={handleDeleteAllSpaces} />
+        <SettingsModal
+          onClose={() => setShowSettings(false)}
+          onImportDone={handleImportDone}
+          onServerChanged={() => { window.location.reload(); }}
+          activeOrgId={activeOrgId}
+          activeOrgName={orgs.find((o) => o.id === activeOrgId)?.name ?? personalName}
+          onDeleteAllSpaces={handleDeleteAllSpaces}
+        />
       )}
       {showAuth && (
         <AuthModal onClose={() => setShowAuth(false)} onLogin={login} onRegister={register} />

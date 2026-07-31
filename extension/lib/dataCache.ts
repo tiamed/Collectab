@@ -51,15 +51,40 @@ function pruneRecord<T>(record: Record<string, CacheEntry<T>>, max: number) {
   }
 }
 
-function scheduleSave() {
-  if (typeof chrome === 'undefined' || !chrome.storage?.local) return;
+function scheduleSave(immediate = false): Promise<void> {
+  if (typeof chrome === 'undefined' || !chrome.storage?.local) return Promise.resolve();
   if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
+
+  const write = () => {
+    saveTimer = null;
     pruneRecord(memory.spaces, MAX_SPACES);
     pruneRecord(memory.collections, MAX_COLLECTION_SETS);
     pruneRecord(memory.bookmarksBySpace, MAX_BOOKMARK_SPACES);
-    chrome.storage.local.set({ [CACHE_KEY]: memory }).catch(() => {});
-  }, 200);
+    return chrome.storage.local.set({ [CACHE_KEY]: memory }).catch(() => {});
+  };
+
+  if (immediate) {
+    return Promise.resolve(write()).then(() => undefined);
+  }
+  return new Promise((resolve) => {
+    saveTimer = setTimeout(() => {
+      void write().then(() => resolve());
+    }, 200);
+  });
+}
+
+/** Wipe in-memory + persisted cache (e.g. after switching API server). */
+export async function clearDataCache(): Promise<void> {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+  memory = emptyCache();
+  loaded = true;
+  loadPromise = null;
+  if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+    await chrome.storage.local.remove([CACHE_KEY, 'data_cache_v1']).catch(() => {});
+  }
 }
 
 export async function ensureDataCacheLoaded() {
@@ -120,9 +145,13 @@ export function getCachedBookmarksBySpace(spaceId: string): SpaceBookmarks | nul
   return getEntry(memory.bookmarksBySpace, spaceId);
 }
 
-export function setCachedBookmarksBySpace(spaceId: string, data: SpaceBookmarks) {
+export function setCachedBookmarksBySpace(
+  spaceId: string,
+  data: SpaceBookmarks,
+  opts?: { flush?: boolean },
+): Promise<void> {
   memory.bookmarksBySpace[spaceId] = { data, updatedAt: Date.now() };
-  scheduleSave();
+  return scheduleSave(opts?.flush === true);
 }
 
 /** Patch one collection inside a space cache entry. */
@@ -130,7 +159,8 @@ export function setCachedBookmarksForCollection(
   spaceId: string,
   collectionId: string,
   bookmarks: Bookmark[],
-) {
+  opts?: { flush?: boolean },
+): Promise<void> {
   const existing = getCachedBookmarksBySpace(spaceId) || {};
-  setCachedBookmarksBySpace(spaceId, { ...existing, [collectionId]: bookmarks });
+  return setCachedBookmarksBySpace(spaceId, { ...existing, [collectionId]: bookmarks }, opts);
 }

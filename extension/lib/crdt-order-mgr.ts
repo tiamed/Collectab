@@ -101,8 +101,12 @@ export class CrdtOrderManager {
   }
 
   addToEnd(collectionId: string, bookmarkId: string): void {
-    if (!this.doc) return;
-    this.doc.getList(collectionId).push(bookmarkId);
+    if (!this.doc || !this.initialized) return;
+    const list = this.doc.getList(collectionId);
+    for (let i = 0; i < list.length; i++) {
+      if ((list.get(i) as string) === bookmarkId) return;
+    }
+    list.push(bookmarkId);
     this.doc.commit();
   }
 

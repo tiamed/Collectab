@@ -29,6 +29,7 @@ export default function AuthModal({ onClose, onLogin, onRegister }: AuthModalPro
       const trimmed = serverUrl.trim().replace(/\/+$/, '');
       if (trimmed && trimmed !== getApiBase()) {
         await setApiBase(trimmed);
+        // Session/cache cleared; continue to login on the new server
       }
 
       if (mode === 'login') {

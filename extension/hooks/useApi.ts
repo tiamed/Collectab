@@ -156,6 +156,11 @@ export function useCollectionBookmarks(spaceId: string | null) {
   const [loading, setLoading] = useState(false);
   const fetchGenRef = useRef(0);
 
+  /** Drop in-flight GET results so they cannot overwrite local mutations. */
+  const bumpFetchGen = useCallback(() => {
+    fetchGenRef.current += 1;
+  }, []);
+
   const fetch = useCallback(async (_force = false) => {
     if (!spaceId) {
       setData({});
@@ -192,60 +197,68 @@ export function useCollectionBookmarks(spaceId: string | null) {
 
   const reorder = useCallback(async (collectionId: string, orderedBookmarks: api.Bookmark[]) => {
     if (!spaceId) return;
+    bumpFetchGen();
     const bookmarkIds = orderedBookmarks.map((b) => b.id);
     await api.reorderBookmarks(collectionId, bookmarkIds);
-    setCachedBookmarksForCollection(spaceId, collectionId, orderedBookmarks);
     setData((prev) => ({ ...prev, [collectionId]: orderedBookmarks }));
-  }, [spaceId]);
+    await setCachedBookmarksForCollection(spaceId, collectionId, orderedBookmarks, { flush: true });
+  }, [spaceId, bumpFetchGen]);
 
   /** Optimistic local reorder without REST (CRDT path). */
   const reorderLocal = useCallback((collectionId: string, orderedBookmarks: api.Bookmark[]) => {
     if (!spaceId) return;
-    setCachedBookmarksForCollection(spaceId, collectionId, orderedBookmarks);
+    bumpFetchGen();
     setData((prev) => ({ ...prev, [collectionId]: orderedBookmarks }));
-  }, [spaceId]);
+    void setCachedBookmarksForCollection(spaceId, collectionId, orderedBookmarks, { flush: true });
+  }, [spaceId, bumpFetchGen]);
 
   const update = useCallback(async (id: string, updates: Parameters<typeof api.updateBookmark>[1]) => {
     const bookmark = await api.updateBookmark(id, updates);
     if (!spaceId) return bookmark;
+    bumpFetchGen();
+    let next: Record<string, api.Bookmark[]> = {};
     setData((prev) => {
-      const next = { ...prev };
+      next = { ...prev };
       for (const colId of Object.keys(next)) {
         next[colId] = next[colId].filter((b) => b.id !== id);
       }
       const targetColId = bookmark.collectionId;
       if (!next[targetColId]) next[targetColId] = [];
       next[targetColId] = [...next[targetColId], bookmark].sort((a, b) => a.orderIndex - b.orderIndex);
-      setCachedBookmarksBySpace(spaceId, next);
       return next;
     });
+    await setCachedBookmarksBySpace(spaceId, next, { flush: true });
     return bookmark;
-  }, [spaceId]);
+  }, [spaceId, bumpFetchGen]);
 
   const remove = useCallback(async (id: string) => {
     await api.deleteBookmark(id);
     if (!spaceId) return;
+    bumpFetchGen();
+    let next: Record<string, api.Bookmark[]> = {};
     setData((prev) => {
-      const next = { ...prev };
+      next = { ...prev };
       for (const colId of Object.keys(next)) {
         next[colId] = next[colId].filter((b) => b.id !== id);
       }
-      setCachedBookmarksBySpace(spaceId, next);
       return next;
     });
-  }, [spaceId]);
+    await setCachedBookmarksBySpace(spaceId, next, { flush: true });
+  }, [spaceId, bumpFetchGen]);
 
   const add = useCallback(async (params: Parameters<typeof api.createBookmark>[0]) => {
     const bookmark = await api.createBookmark(params);
     if (!spaceId) return bookmark;
+    bumpFetchGen();
+    let next: Record<string, api.Bookmark[]> = {};
     setData((prev) => {
       const list = [...(prev[params.collectionId] || []), bookmark];
-      const next = { ...prev, [params.collectionId]: list };
-      setCachedBookmarksBySpace(spaceId, next);
+      next = { ...prev, [params.collectionId]: list };
       return next;
     });
+    await setCachedBookmarksBySpace(spaceId, next, { flush: true });
     return bookmark;
-  }, [spaceId]);
+  }, [spaceId, bumpFetchGen]);
 
   const refetch = useCallback(() => fetch(true), [fetch]);
 
