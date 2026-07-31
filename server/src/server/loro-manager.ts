@@ -1,60 +1,50 @@
-import { LoroDoc } from 'loro-crdt';
 import type { WebSocket } from 'ws';
+import type { ShadowDocManager } from './shadow-doc-manager.js';
+import type { SyncBatcher } from './sync-batcher.js';
 
 interface Room {
-  doc: LoroDoc;
   clients: Set<WebSocket>;
-  lastUpdated: number;
 }
 
-export class LoroRoomManager {
+/** Pure WebSocket relay — no LoroDoc ownership. */
+export class WsRelayManager {
   private rooms = new Map<string, Room>();
 
-  getOrCreateRoom(roomId: string): Room {
+  constructor(
+    private shadowDocManager: ShadowDocManager,
+    private syncBatcher: SyncBatcher,
+  ) {}
+
+  addClient(roomId: string, client: WebSocket) {
     let room = this.rooms.get(roomId);
     if (!room) {
-      const doc = new LoroDoc();
-      room = { doc, clients: new Set(), lastUpdated: Date.now() };
+      room = { clients: new Set() };
       this.rooms.set(roomId, room);
     }
-    return room;
+    room.clients.add(client);
   }
 
-  applyUpdate(roomId: string, update: Uint8Array, sender: WebSocket): void {
-    const room = this.getOrCreateRoom(roomId);
-    room.doc.import(update);
-    room.lastUpdated = Date.now();
+  removeClient(roomId: string, client: WebSocket) {
+    const room = this.rooms.get(roomId);
+    if (!room) return;
+    room.clients.delete(client);
+    if (room.clients.size === 0) this.rooms.delete(roomId);
+  }
 
-    for (const client of room.clients) {
-      if (client !== sender && client.readyState === client.OPEN) {
-        client.send(update);
+  async handleUpdate(roomId: string, update: Uint8Array, sender: WebSocket) {
+    await this.shadowDocManager.importUpdate(roomId, update);
+    this.syncBatcher.notifyChange(roomId);
+    const room = this.rooms.get(roomId);
+    if (!room) return;
+    for (const c of room.clients) {
+      if (c !== sender && c.readyState === c.OPEN) {
+        c.send(update);
       }
     }
   }
 
-  getSnapshot(roomId: string): Uint8Array {
-    const room = this.getOrCreateRoom(roomId);
-    return room.doc.export({ mode: 'snapshot' });
-  }
-
-  addClient(roomId: string, client: WebSocket): void {
-    const room = this.getOrCreateRoom(roomId);
-    room.clients.add(client);
-  }
-
-  removeClient(roomId: string, client: WebSocket): void {
-    const room = this.rooms.get(roomId);
-    if (room) {
-      room.clients.delete(client);
-      // TODO: persist snapshot to database when room is empty
-    }
-  }
-
-  getRoomStats() {
-    const stats: Record<string, { clients: number; lastUpdated: number }> = {};
-    for (const [id, room] of this.rooms) {
-      stats[id] = { clients: room.clients.size, lastUpdated: room.lastUpdated };
-    }
-    return stats;
+  async ensureRoomReady(roomId: string): Promise<Uint8Array | null> {
+    await this.shadowDocManager.getOrCreate(roomId);
+    return this.shadowDocManager.getSnapshot(roomId);
   }
 }

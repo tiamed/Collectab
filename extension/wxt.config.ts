@@ -5,6 +5,10 @@ export default defineConfig({
   modules: ['@wxt-dev/module-react'],
   vite: () => ({
     plugins: [tailwindcss()],
+    // Keep loro out of dep pre-bundling so the base64 entry's inlined WASM stays intact.
+    optimizeDeps: {
+      exclude: ['loro-crdt'],
+    },
   }),
   manifest: {
     name: 'Collectab',

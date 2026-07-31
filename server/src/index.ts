@@ -1,10 +1,10 @@
 import 'dotenv/config';
-import { createServer } from 'node:http';
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
-import { WebSocketServer, WebSocket } from 'ws';
+import { WebSocketServer } from 'ws';
+import jwt from 'jsonwebtoken';
 import { authRoutes } from './api/routes/auth.js';
 import { spaceRoutes } from './api/routes/spaces.js';
 import { collectionRoutes } from './api/routes/collections.js';
@@ -13,66 +13,129 @@ import { searchRoutes } from './api/routes/search.js';
 import { importRoutes } from './api/routes/import.js';
 import { memberRoutes } from './api/routes/members.js';
 import { orgRoutes } from './api/routes/organizations.js';
-import { LoroRoomManager } from './server/loro-manager.js';
+import { WsRelayManager } from './server/loro-manager.js';
+import { ShadowDocManager } from './server/shadow-doc-manager.js';
+import { SnapshotStore } from './server/snapshot-store.js';
+import { SyncBatcher } from './server/sync-batcher.js';
+import { getPool } from './database/client.js';
+import { runMigrations } from './database/migrate.js';
 import { getEnv } from './config/env.js';
 
-const env = getEnv();
-const app = new Hono();
-const roomManager = new LoroRoomManager();
+async function main() {
+  await runMigrations();
 
-app.use('*', logger());
-app.use('*', cors({ origin: env.CORS_ORIGIN }));
+  const env = getEnv();
+  const app = new Hono();
 
-app.get('/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }));
+  const snapshotStore = new SnapshotStore();
+  const shadowDocManager = new ShadowDocManager();
+  const syncBatcher = new SyncBatcher(shadowDocManager);
+  const roomManager = new WsRelayManager(shadowDocManager, syncBatcher);
+  shadowDocManager.startAutoSnapshot(snapshotStore);
 
-app.route('/api/auth', authRoutes);
-app.route('/api/spaces', spaceRoutes);
-app.route('/api/collections', collectionRoutes);
-app.route('/api/bookmarks', bookmarkRoutes);
-app.route('/api/search', searchRoutes);
-app.route('/api/import', importRoutes);
-app.route('/api/members', memberRoutes);
-app.route('/api/orgs', orgRoutes);
+  setInterval(() => shadowDocManager.cleanStaleRooms(), 60 * 60 * 1000);
 
-// Create Node.js HTTP server with Hono and WebSocket
-const server = serve({ fetch: app.fetch, port: env.PORT }, (info) => {
-  console.log(`Server running on http://localhost:${info.port}`);
-});
+  app.use('*', logger());
+  app.use('*', cors({ origin: env.CORS_ORIGIN }));
 
-// WebSocket server for Loro CRDT sync
-const wss = new WebSocketServer({ noServer: true });
+  app.get('/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
-(server as any).on('upgrade', (request: any, socket: any, head: any) => {
-  const url = new URL(request.url || '', `http://${request.headers.host}`);
-  const match = url.pathname.match(/^\/ws\/workspace\/(.+)$/);
+  app.route('/api/auth', authRoutes);
+  app.route('/api/spaces', spaceRoutes);
+  app.route('/api/collections', collectionRoutes);
+  app.route('/api/bookmarks', bookmarkRoutes);
+  app.route('/api/search', searchRoutes);
+  app.route('/api/import', importRoutes);
+  app.route('/api/members', memberRoutes);
+  app.route('/api/orgs', orgRoutes);
 
-  if (!match) {
-    socket.destroy();
-    return;
+  const server = serve({ fetch: app.fetch, port: env.PORT }, (info) => {
+    console.log(`Server running on http://localhost:${info.port}`);
+  });
+
+  const wss = new WebSocketServer({ noServer: true });
+
+  async function hasSpaceAccess(userId: string, spaceId: string): Promise<boolean> {
+    const pool = getPool();
+    const r = await pool.query(
+      `SELECT 1 FROM spaces s
+       LEFT JOIN space_members sm ON sm.space_id = s.id AND sm.user_id = $2
+       LEFT JOIN org_members om ON om.org_id = s.org_id AND om.user_id = $2
+       WHERE s.id = $1
+         AND (s.owner_id = $2 OR sm.user_id = $2 OR om.user_id = $2
+              OR s.org_id IN (SELECT id FROM organizations WHERE owner_id = $2))`,
+      [spaceId, userId],
+    );
+    return r.rows.length > 0;
   }
 
-  const roomId = match[1];
-  // TODO: validate JWT from url.searchParams.get('token')
+  (server as any).on('upgrade', (request: any, socket: any, head: any) => {
+    void (async () => {
+      try {
+        const url = new URL(request.url || '', `http://${request.headers.host}`);
+        const match = url.pathname.match(/^\/ws\/space\/(.+)$/);
+        if (!match) {
+          socket.destroy();
+          return;
+        }
 
-  wss.handleUpgrade(request, socket, head, (ws) => {
-    roomManager.addClient(roomId, ws);
+        const spaceId = match[1];
+        const token = url.searchParams.get('token');
+        if (!token) {
+          socket.destroy();
+          return;
+        }
 
-    const snapshot = roomManager.getSnapshot(roomId);
-    ws.send(snapshot);
+        let userId: string;
+        try {
+          const payload = jwt.verify(token, env.JWT_SECRET) as { sub: string };
+          userId = payload.sub;
+        } catch {
+          socket.destroy();
+          return;
+        }
 
-    ws.on('message', (data: Buffer) => {
-      roomManager.applyUpdate(roomId, new Uint8Array(data), ws);
-    });
+        if (!(await hasSpaceAccess(userId, spaceId))) {
+          socket.destroy();
+          return;
+        }
 
-    ws.on('close', () => {
-      roomManager.removeClient(roomId, ws);
-    });
+        wss.handleUpgrade(request, socket, head, (ws) => {
+          void (async () => {
+            roomManager.addClient(spaceId, ws);
 
-    ws.on('error', (err) => {
-      console.error(`WebSocket error in room ${roomId}:`, err.message);
-      roomManager.removeClient(roomId, ws);
-    });
+            try {
+              const snapshot = await roomManager.ensureRoomReady(spaceId);
+              if (snapshot) ws.send(snapshot);
+            } catch (err) {
+              console.error(`Failed to prepare CRDT room ${spaceId}:`, err);
+            }
+
+            ws.on('message', (data: Buffer | ArrayBuffer | Buffer[]) => {
+              const buf = Buffer.isBuffer(data) ? data : Buffer.from(data as ArrayBuffer);
+              void roomManager.handleUpdate(spaceId, new Uint8Array(buf), ws).catch((err) => {
+                console.error(`CRDT update failed for space ${spaceId}:`, err);
+              });
+            });
+
+            ws.on('close', () => roomManager.removeClient(spaceId, ws));
+            ws.on('error', (err) => {
+              console.error(`WebSocket error in space ${spaceId}:`, err.message);
+              roomManager.removeClient(spaceId, ws);
+            });
+          })();
+        });
+      } catch (err) {
+        console.error('WebSocket upgrade error:', err);
+        socket.destroy();
+      }
+    })();
   });
-});
 
-console.log(`WebSocket ready on ws://localhost:${env.PORT}/ws/workspace/:id`);
+  console.log(`WebSocket ready on ws://localhost:${env.PORT}/ws/space/:id`);
+}
+
+main().catch((err) => {
+  console.error('Failed to start server:', err);
+  process.exit(1);
+});

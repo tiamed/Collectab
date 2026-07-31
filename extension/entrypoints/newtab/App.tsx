@@ -12,8 +12,10 @@ import DeleteOrgModal from '@/components/DeleteOrgModal';
 import { useOrganizations, useSpaces, useCollections, useCollectionBookmarks } from '@/hooks/useApi';
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/useTheme';
-import { loadApiBase, createCollection, createSpace, createOrganization, updateOrganization, deleteOrganization, updateSpace, deleteSpace, deleteAllSpaces, updateCollection, deleteCollection, updateBookmark } from '@/lib/api';
+import { loadApiBase, createCollection, createSpace, createOrganization, updateOrganization, deleteOrganization, updateSpace, deleteSpace, deleteAllSpaces, updateCollection, deleteCollection } from '@/lib/api';
 import type { Bookmark } from '@/lib/api';
+import { CrdtOrderManager } from '@/lib/crdt-order-mgr';
+import { CrdtSyncClient } from '@/lib/crdt-sync-port';
 
 const STORAGE_KEY_ORG = 'active_org_id';
 const STORAGE_KEY_SPACE = 'active_space_id';
@@ -116,8 +118,73 @@ export default function App() {
     remove,
     add,
     reorder,
+    reorderLocal,
     refetch: refetchBookmarks,
   } = useCollectionBookmarks(collectionIds);
+
+  const crdtOrderRef = useRef<CrdtOrderManager | null>(null);
+  const bookmarksRef = useRef(bookmarksByCollection);
+  const collectionsRef = useRef(collections);
+  bookmarksRef.current = bookmarksByCollection;
+  collectionsRef.current = collections;
+
+  const applyCrdtOrderToUi = useCallback((mgr: CrdtOrderManager) => {
+    for (const col of collectionsRef.current) {
+      const ids = mgr.getOrderedIds(col.id);
+      if (ids.length === 0) continue;
+      const current = bookmarksRef.current[col.id] || [];
+      const byId = new Map(current.map((b) => [b.id, b]));
+      const ordered = ids.map((id) => byId.get(id)).filter(Boolean) as Bookmark[];
+      if (ordered.length > 0) reorderLocal(col.id, ordered);
+    }
+  }, [reorderLocal]);
+
+  // CRDT WS lives in the newtab page (not MV3 SW) — Port to background often fails with
+  // "Receiving end does not exist" when the service worker is asleep/unloaded.
+  useEffect(() => {
+    if (!activeSpaceId || !loggedIn) return;
+
+    const mgr = new CrdtOrderManager();
+    const client = new CrdtSyncClient();
+    crdtOrderRef.current = mgr;
+
+    mgr.init(activeSpaceId, (updateBytes) => {
+      client.send(updateBytes);
+    });
+
+    client.connect(activeSpaceId, (updateBytes) => {
+      if (!mgr.isReady) {
+        mgr.bootstrapWithSnapshot(updateBytes);
+      } else {
+        mgr.applyRemoteUpdate(updateBytes);
+      }
+      if (mgr.isReady) applyCrdtOrderToUi(mgr);
+    });
+
+    return () => {
+      mgr.destroy();
+      client.disconnect();
+      crdtOrderRef.current = null;
+    };
+  }, [activeSpaceId, loggedIn, applyCrdtOrderToUi]);
+
+  // REST bootstrap only after bookmarks are loaded (avoid empty CRDT lists that break move()).
+  useEffect(() => {
+    if (!activeSpaceId || !loggedIn || bksLoading) return;
+    const mgr = crdtOrderRef.current;
+    if (!mgr || mgr.isReady) return;
+
+    const timeoutId = setTimeout(() => {
+      if (mgr.isReady) return;
+      const restData: Record<string, string[]> = {};
+      for (const col of collectionsRef.current) {
+        restData[col.id] = (bookmarksRef.current[col.id] || []).map((b) => b.id);
+      }
+      mgr.bootstrapFromREST(restData);
+    }, 1500);
+
+    return () => clearTimeout(timeoutId);
+  }, [activeSpaceId, loggedIn, bksLoading, collectionIds, bookmarksByCollection]);
 
   const activeSpace = spaces.find((s) => s.id === activeSpaceId);
 
@@ -234,21 +301,66 @@ export default function App() {
     refetchCollections();
   }, [refetchCollections, openConfirm]);
 
-  const handleCollectionReorder = useCallback(async (collectionId: string, orderedBookmarks: Bookmark[]) => {
-    try {
-      await reorder(collectionId, orderedBookmarks);
-    } catch {
-      // noop - DnD state already reflects the change
+  const handleCollectionReorder = useCallback((
+    collectionId: string,
+    orderedBookmarks: Bookmark[],
+    meta: { bookmarkId: string; fromIndex: number; toIndex: number },
+  ) => {
+    reorderLocal(collectionId, orderedBookmarks);
+    const mgr = crdtOrderRef.current;
+    if (mgr?.isReady) {
+      mgr.move(collectionId, meta.bookmarkId, meta.fromIndex, meta.toIndex);
+    } else {
+      // Persist via REST until CRDT is ready (WS snapshot / REST bootstrap).
+      void reorder(collectionId, orderedBookmarks);
     }
-  }, [reorder]);
+  }, [reorderLocal, reorder]);
 
-  const handleTransferBookmark = useCallback(async (bookmarkId: string, targetCollectionId: string, newIndex: number) => {
+  const handleTransferBookmark = useCallback(async (
+    bookmarkId: string,
+    fromCollectionId: string,
+    targetCollectionId: string,
+    newIndex: number,
+  ) => {
+    const mgr = crdtOrderRef.current;
+    if (mgr?.isReady) {
+      const srcIds = mgr.getOrderedIds(fromCollectionId);
+      const from = srcIds.indexOf(bookmarkId);
+      if (from !== -1) {
+        mgr.moveAcross(bookmarkId, fromCollectionId, from, targetCollectionId, newIndex);
+      }
+    }
     try {
       await update(bookmarkId, { collectionId: targetCollectionId, orderIndex: newIndex });
     } catch {
       // noop - DnD state already reflects the change
     }
   }, [update]);
+
+  const handleAddBookmark = useCallback(async (params: {
+    collectionId: string;
+    title: string;
+    url: string;
+    description?: string;
+    favicon?: string;
+    tags?: string[];
+  }) => {
+    const bookmark = await add(params);
+    crdtOrderRef.current?.addToEnd(params.collectionId, bookmark.id);
+    return bookmark;
+  }, [add]);
+
+  const handleDeleteBookmark = useCallback(async (id: string) => {
+    let collectionId: string | null = null;
+    for (const [colId, bks] of Object.entries(bookmarksByCollection)) {
+      if (bks.some((b) => b.id === id)) {
+        collectionId = colId;
+        break;
+      }
+    }
+    await remove(id);
+    if (collectionId) crdtOrderRef.current?.remove(collectionId, id);
+  }, [remove, bookmarksByCollection]);
 
   const handleDeleteAllSpaces = useCallback(async () => {
     await deleteAllSpaces(activeOrgId);
@@ -353,8 +465,8 @@ export default function App() {
           bookmarksByCollection={filteredBookmarks}
           loading={colsLoading || bksLoading}
           onUpdateBookmark={update}
-          onDeleteBookmark={remove}
-          onAddBookmark={add}
+          onDeleteBookmark={handleDeleteBookmark}
+          onAddBookmark={handleAddBookmark}
           onRenameCollection={handleRenameCollection}
           onDeleteCollection={handleDeleteCollection}
           onCollectionReorder={handleCollectionReorder}

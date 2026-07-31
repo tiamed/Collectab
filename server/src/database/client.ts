@@ -14,6 +14,12 @@ export function getDb() {
   return db;
 }
 
+export function getPool(): pg.Pool {
+  getDb();
+  if (!pool) throw new Error('Database pool not initialized');
+  return pool;
+}
+
 export async function closeDb() {
   if (pool) {
     await pool.end();

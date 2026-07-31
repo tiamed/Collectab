@@ -36,8 +36,6 @@ async function handleSaveSession(): Promise<{ success: boolean; collectionId?: s
     const now = new Date();
     const collectionName = `Session ${now.toLocaleDateString()} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 
-    // TODO: Create collection + bookmarks via Loro CRDT and sync to server
-    // For now, store in extension local storage
     const stored = await browser.storage.local.get('sessions');
     const sessions: any[] = (stored.sessions as any[]) || [];
     const newSession = {
