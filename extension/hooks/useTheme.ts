@@ -1,25 +1,13 @@
-import { useState, useEffect, useCallback } from 'react';
-
-const STORAGE_KEY = 'theme';
-type Theme = 'light' | 'dark';
+import { useState, useCallback } from 'react';
+import { applyTheme, persistTheme, readThemeSync, type Theme } from '@/lib/theme';
 
 export function useTheme() {
-  const [theme, setThemeState] = useState<Theme>('dark');
-
-  useEffect(() => {
-    chrome.storage.local.get(STORAGE_KEY).then((stored) => {
-      const saved = stored[STORAGE_KEY] as Theme | undefined;
-      if (saved) {
-        setThemeState(saved);
-        applyTheme(saved);
-      }
-    });
-  }, []);
+  const [theme, setThemeState] = useState<Theme>(readThemeSync);
 
   const setTheme = useCallback((t: Theme) => {
     setThemeState(t);
     applyTheme(t);
-    chrome.storage.local.set({ [STORAGE_KEY]: t });
+    persistTheme(t);
   }, []);
 
   const toggle = useCallback(() => {
@@ -27,15 +15,4 @@ export function useTheme() {
   }, [theme, setTheme]);
 
   return { theme, setTheme, toggle };
-}
-
-function applyTheme(theme: Theme) {
-  const root = document.documentElement;
-  if (theme === 'dark') {
-    root.classList.add('dark');
-    root.setAttribute('data-theme', 'dark');
-  } else {
-    root.classList.remove('dark');
-    root.setAttribute('data-theme', 'light');
-  }
 }

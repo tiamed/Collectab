@@ -1,14 +1,22 @@
-import { UserPlus, Settings, Plus } from 'lucide-react';
+import { UserPlus, Settings, Plus, ArrowDownZA } from 'lucide-react';
 
 interface TopBarProps {
   spaceName: string;
   collectionCount: number;
   onAddCollection: () => void;
+  onSortCollections: () => void;
   onOpenSettings: () => void;
   onManageMembers: () => void;
 }
 
-export default function TopBar({ spaceName, collectionCount, onAddCollection, onOpenSettings, onManageMembers }: TopBarProps) {
+export default function TopBar({
+  spaceName,
+  collectionCount,
+  onAddCollection,
+  onSortCollections,
+  onOpenSettings,
+  onManageMembers,
+}: TopBarProps) {
   return (
     <header className="flex h-14 shrink-0 items-center justify-between border-b border-[var(--border)] px-6">
       <div className="flex items-center gap-2.5">
@@ -17,6 +25,14 @@ export default function TopBar({ spaceName, collectionCount, onAddCollection, on
       </div>
 
       <div className="flex items-center gap-1.5">
+        <button
+          onClick={onSortCollections}
+          disabled={collectionCount === 0}
+          className="flex size-7 items-center justify-center rounded text-[var(--muted)] hover:bg-[var(--surface)] disabled:opacity-40 disabled:hover:bg-transparent"
+          title="Sort collections"
+        >
+          <ArrowDownZA className="size-4" strokeWidth={1.5} />
+        </button>
         <button
           onClick={onManageMembers}
           className="flex size-7 items-center justify-center rounded text-[var(--muted)] hover:bg-[var(--surface)]"

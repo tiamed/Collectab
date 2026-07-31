@@ -1,10 +1,53 @@
 <!doctype html>
-<html lang="en" class="dark" data-theme="dark">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Save Bookmark</title>
     <meta name="manifest.type" content="browser_action" />
+    <!-- Prevent FOUC: same theme boot as newtab. -->
+    <style id="theme-boot">html{visibility:hidden}</style>
+    <script>
+      (function () {
+        var KEY = 'theme';
+        function apply(t) {
+          t = t === 'light' ? 'light' : 'dark';
+          var root = document.documentElement;
+          if (t === 'dark') {
+            root.classList.add('dark');
+            root.setAttribute('data-theme', 'dark');
+          } else {
+            root.classList.remove('dark');
+            root.setAttribute('data-theme', 'light');
+          }
+          try { localStorage.setItem(KEY, t); } catch (e) {}
+          var boot = document.getElementById('theme-boot');
+          if (boot) boot.remove();
+        }
+        try {
+          var cached = localStorage.getItem(KEY);
+          if (cached === 'light' || cached === 'dark') {
+            apply(cached);
+            return;
+          }
+        } catch (e) {}
+        if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+          var done = false;
+          chrome.storage.local.get(KEY, function (stored) {
+            if (done) return;
+            done = true;
+            apply(stored && stored[KEY]);
+          });
+          setTimeout(function () {
+            if (done) return;
+            done = true;
+            apply('dark');
+          }, 200);
+        } else {
+          apply('dark');
+        }
+      })();
+    </script>
   </head>
   <body class="bg-background text-foreground">
     <div id="root"></div>

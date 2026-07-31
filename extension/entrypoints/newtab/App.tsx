@@ -6,6 +6,7 @@ import ContentArea from '@/components/ContentArea';
 import SettingsModal from '@/components/SettingsModal';
 import AuthModal from '@/components/AuthModal';
 import MembersModal from '@/components/MembersModal';
+import SortCollectionsModal from '@/components/SortCollectionsModal';
 import PromptModal from '@/components/PromptModal';
 import ConfirmModal from '@/components/ConfirmModal';
 import DeleteOrgModal from '@/components/DeleteOrgModal';
@@ -52,6 +53,7 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
+  const [showSortCollections, setShowSortCollections] = useState(false);
 
   // Prompt modal state
   const [promptOpen, setPromptOpen] = useState(false);
@@ -286,6 +288,16 @@ export default function App() {
     refetchSpaces();
   }, [refetchSpaces]);
 
+  const handleReorderCollections = useCallback(async (orderedIds: string[]) => {
+    await Promise.all(orderedIds.map((id, i) => updateCollection(id, { orderIndex: i })));
+    refetchCollections();
+  }, [refetchCollections]);
+
+  const handleOpenSortCollections = useCallback(() => {
+    setShowSortCollections(true);
+    void refetchCollections();
+  }, [refetchCollections]);
+
   const handleRenameSpace = useCallback(async (id: string, name: string) => {
     await updateSpace(id, { name });
     refetchSpaces();
@@ -466,6 +478,7 @@ export default function App() {
           spaceName={activeSpace?.name ?? ''}
           collectionCount={collections.length}
           onAddCollection={handleAddCollection}
+          onSortCollections={handleOpenSortCollections}
           onOpenSettings={() => setShowSettings(true)}
           onManageMembers={() => setShowMembers(true)}
         />
@@ -513,6 +526,15 @@ export default function App() {
           spaceId={activeSpaceId}
           spaceName={activeSpace?.name ?? ''}
           onClose={() => setShowMembers(false)}
+        />
+      )}
+
+      {showSortCollections && (
+        <SortCollectionsModal
+          collections={collections}
+          loading={colsLoading}
+          onReorder={handleReorderCollections}
+          onClose={() => setShowSortCollections(false)}
         />
       )}
 
