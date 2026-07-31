@@ -9,7 +9,9 @@ interface BookmarkCardProps {
 }
 
 export default function BookmarkCard({ bookmark, onEdit, onDelete }: BookmarkCardProps) {
-  const [faviconError, setFaviconError] = useState(false);
+  // Track which src failed so a new favicon URL after sync/edit retries <img>
+  const [failedFavicon, setFailedFavicon] = useState<string | null>(null);
+  const showFavicon = Boolean(bookmark.favicon) && failedFavicon !== bookmark.favicon;
   const domain = (() => {
     try { return new URL(bookmark.url).hostname.replace('www.', ''); }
     catch { return bookmark.url; }
@@ -40,12 +42,12 @@ export default function BookmarkCard({ bookmark, onEdit, onDelete }: BookmarkCar
 
       {/* Header */}
       <div className="flex items-center gap-2">
-        {bookmark.favicon && !faviconError ? (
+        {showFavicon ? (
           <img
-            src={bookmark.favicon}
+            src={bookmark.favicon!}
             alt=""
             className="size-4 shrink-0 rounded-sm"
-            onError={() => setFaviconError(true)}
+            onError={() => setFailedFavicon(bookmark.favicon ?? null)}
           />
         ) : (
           <div className="flex size-4 shrink-0 items-center justify-center rounded-sm bg-[var(--muted)]/20 text-[8px] font-bold text-[var(--muted)]">
