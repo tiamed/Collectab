@@ -2,7 +2,7 @@ services:
   postgres:
     image: postgres:17-alpine
     environment:
-      POSTGRES_DB: toby_bookmark
+      POSTGRES_DB: collectab
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     ports:
@@ -31,7 +31,7 @@ services:
     ports:
       - "3001:3001"
     environment:
-      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/toby_bookmark
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/collectab
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-refresh-secret}
       REDIS_URL: redis://redis:6379

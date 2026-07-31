@@ -30,35 +30,74 @@ A Toby-like browser extension bookmark manager with organizations, spaces, colle
 
 ## Self-Deployment
 
-### Quick Start (Docker Compose)
+PostgreSQL is **required**. Redis in `docker-compose.yml` is optional for this stack (compose starts it for convenience).
+
+### Option A — Docker Compose (recommended)
 
 ```bash
-# 1. Clone and start all services (pulls pre-built image from ghcr.io)
 git clone https://github.com/tiamed/Collectab.git && cd Collectab
 docker compose up -d
-
-# 2. Run database migrations
-docker compose exec postgres psql -U postgres -d toby_bookmark \
-  -f /dev/stdin < server/src/database/migrations/001_initial.sql
-docker compose exec postgres psql -U postgres -d toby_bookmark \
-  -f /dev/stdin < server/src/database/migrations/002_space_members.sql
-docker compose exec postgres psql -U postgres -d toby_bookmark \
-  -f /dev/stdin < server/src/database/migrations/003_organizations.sql
 ```
 
-The server will be available at `http://localhost:3001/api`.
+This starts **PostgreSQL**, Redis, and the API server. The server applies SQL migrations automatically on startup.
 
-> **Note**: `docker compose up` will pull the pre-built server image from `ghcr.io/tiamed/collectab/server:latest`. To build locally instead, use `docker compose up --build`.
+API: `http://localhost:3001/api`  
+Postgres (host): `localhost:5432` — database `collectab`, user/password `postgres` / `postgres` (override with `POSTGRES_PASSWORD`).
 
-Or pull the server image directly:
+> Existing installs using the old database name `toby_bookmark` can keep their `DATABASE_URL` as-is, or rename the DB (`ALTER DATABASE toby_bookmark RENAME TO collectab`) and update the connection string.
+
+> `docker compose up` pulls `ghcr.io/tiamed/collectab/server:latest`. To build locally: `docker compose up --build`.
+
+### Option B — PostgreSQL + server separately
+
+**1. Start PostgreSQL** (pick one):
+
+```bash
+# From this repo (Postgres only)
+docker compose up postgres -d
+
+# Or a one-off container (no compose)
+docker run -d --name collectab-pg \
+  -e POSTGRES_DB=collectab \
+  -e POSTGRES_USER=postgres \
+  -e POSTGRES_PASSWORD=postgres \
+  -p 5432:5432 \
+  -v collectab-pgdata:/var/lib/postgresql/data \
+  postgres:17-alpine
+```
+
+Wait until ready:
+
+```bash
+docker compose exec postgres pg_isready -U postgres
+# or: docker exec collectab-pg pg_isready -U postgres
+```
+
+**2. Run the API server** (image or local Node):
 
 ```bash
 docker pull ghcr.io/tiamed/collectab/server:latest
-docker run -p 3001:3001 \
-  -e DATABASE_URL=postgresql://postgres:postgres@host.docker.internal:5432/toby_bookmark \
-  -e JWT_SECRET=your-secret-here \
-  -e JWT_REFRESH_SECRET=your-refresh-secret-here \
+docker run --rm -p 3001:3001 \
+  -e DATABASE_URL=postgresql://postgres:postgres@host.docker.internal:5432/collectab \
+  -e JWT_SECRET=your-secret-at-least-32-chars-long \
+  -e JWT_REFRESH_SECRET=your-refresh-secret-at-least-32-chars \
   ghcr.io/tiamed/collectab/server:latest
+```
+
+On Linux, if `host.docker.internal` is unavailable, use the host gateway IP or run with `--network host` and `DATABASE_URL=...@127.0.0.1:5432/collectab`.
+
+Migrations run on server start. To apply SQL manually instead:
+
+```bash
+# Compose Postgres
+for f in server/src/database/migrations/*.sql; do
+  docker compose exec -T postgres psql -U postgres -d collectab < "$f"
+done
+
+# One-off container
+for f in server/src/database/migrations/*.sql; do
+  docker exec -i collectab-pg psql -U postgres -d collectab < "$f"
+done
 ```
 
 ### Configure the Extension
@@ -74,7 +113,7 @@ Copy `server/.env.example` to `server/.env` and customize:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `DATABASE_URL` | PostgreSQL connection string | `postgresql://postgres:postgres@localhost:5432/toby_bookmark` |
+| `DATABASE_URL` | PostgreSQL connection string | `postgresql://postgres:postgres@localhost:5432/collectab` |
 | `JWT_SECRET` | Secret for signing access tokens (min 32 chars) | — |
 | `JWT_REFRESH_SECRET` | Secret for signing refresh tokens | — |
 | `PORT` | Server port | `3001` |
@@ -103,16 +142,20 @@ pnpm zip          # Package as .zip for distribution
 cd server
 npm install
 cp .env.example .env
-docker compose up postgres -d   # Start PostgreSQL only
-npm run dev
+docker compose up postgres -d   # Start PostgreSQL (required)
+# or: docker run -d --name collectab-pg -e POSTGRES_DB=collectab \
+#      -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres \
+#      -p 5432:5432 -v collectab-pgdata:/var/lib/postgresql/data postgres:17-alpine
+npm run dev                     # migrations run automatically on startup
 ```
 
-Run migrations before first use:
+To apply migrations manually:
 
 ```bash
-psql $DATABASE_URL -f src/database/migrations/001_initial.sql
-psql $DATABASE_URL -f src/database/migrations/002_space_members.sql
-psql $DATABASE_URL -f src/database/migrations/003_organizations.sql
+for f in src/database/migrations/*.sql; do
+  psql "$DATABASE_URL" -f "$f"
+done
+# or: npm run db:migrate
 ```
 
 ## CI / Release

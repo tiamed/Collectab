@@ -4,7 +4,7 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PORT: z.coerce.number().default(3001),
   HOST: z.string().default('0.0.0.0'),
-  DATABASE_URL: z.string().default('postgresql://postgres:postgres@localhost:5432/toby_bookmark'),
+  DATABASE_URL: z.string().default('postgresql://postgres:postgres@localhost:5432/collectab'),
   JWT_SECRET: z.string().default('dev-secret-change-in-production-min-32chars'),
   JWT_REFRESH_SECRET: z.string().default('dev-refresh-secret-change-in-prod-32chars'),
   JWT_ACCESS_EXPIRY_SECONDS: z.coerce.number().default(900),   // 15 minutes

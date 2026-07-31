@@ -300,7 +300,7 @@ importMetaRoutes.post('/import-meta', async (c) => {
       const timeout = setTimeout(() => controller.abort(), 5000);
       const response = await fetch(url, {
         signal: controller.signal,
-        headers: { 'User-Agent': 'TobyBookmark/1.0' },
+        headers: { 'User-Agent': 'Collectab/1.0' },
       });
       clearTimeout(timeout);
 
