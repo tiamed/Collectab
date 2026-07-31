@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { X } from 'lucide-react';
 import type { Bookmark, Collection } from '@/lib/api';
+import FaviconField from './FaviconField';
 
 interface EditBookmarkModalProps {
   bookmark: Bookmark;
@@ -14,6 +15,7 @@ export default function EditBookmarkModal({ bookmark, collections, onSave, onClo
   const [url, setUrl] = useState(bookmark.url);
   const [description, setDescription] = useState(bookmark.description ?? '');
   const [tags, setTags] = useState(bookmark.tags.join(', '));
+  const [favicon, setFavicon] = useState(bookmark.favicon ?? '');
   const [collectionId, setCollectionId] = useState(bookmark.collectionId);
   const [saving, setSaving] = useState(false);
 
@@ -26,6 +28,7 @@ export default function EditBookmarkModal({ bookmark, collections, onSave, onClo
         url,
         description: description || undefined,
         tags: tags ? tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
+        favicon,
         collectionId: collectionId !== bookmark.collectionId ? collectionId : undefined,
       });
     } finally {
@@ -52,6 +55,7 @@ export default function EditBookmarkModal({ bookmark, collections, onSave, onClo
           <Field label="URL" value={url} onChange={setUrl} type="url" />
           <Field label="Description" value={description} onChange={setDescription} />
           <Field label="Tags" value={tags} onChange={setTags} placeholder="comma separated" />
+          <FaviconField value={favicon} onChange={setFavicon} pageUrl={url} title={title} />
 
           <div>
             <label className="mb-1 block text-[11px] font-medium text-[var(--muted)]">Collection</label>

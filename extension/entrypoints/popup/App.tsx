@@ -10,6 +10,8 @@ import {
   type Collection,
   type Organization,
 } from '@/lib/api';
+import FaviconField from '@/components/FaviconField';
+import { resolveFaviconUrl } from '@/lib/favicon';
 
 const STORAGE_KEY_ORG = 'active_org_id';
 const STORAGE_KEY_LAST_COLLECTION = 'popup_last_collection';
@@ -41,9 +43,18 @@ export default function App() {
 
       const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
       if (tab) {
-        setTitle(tab.title || '');
-        setUrl(tab.url || '');
-        setFavicon(tab.favIconUrl || '');
+        const pageUrl = tab.url || '';
+        const pageTitle = tab.title || '';
+        setTitle(pageTitle);
+        setUrl(pageUrl);
+        const tabIcon = tab.favIconUrl || '';
+        setFavicon(tabIcon);
+        // Prefer a CDN icon when the tab icon is missing/broken (e.g. CORP-restricted)
+        if (pageUrl) {
+          void resolveFaviconUrl(pageUrl, tabIcon).then((resolved) => {
+            if (resolved) setFavicon(resolved);
+          });
+        }
       }
 
       const stored = await chrome.storage.local.get([STORAGE_KEY_ORG, STORAGE_KEY_LAST_COLLECTION]);
@@ -173,6 +184,8 @@ export default function App() {
           onChange={(e) => setUrl(e.target.value)}
         />
       </div>
+
+      <FaviconField value={favicon} onChange={setFavicon} pageUrl={url} title={title} />
 
       {/* Save Location */}
       <div className="rounded border border-[var(--border)] bg-[var(--field-background)] p-2.5">

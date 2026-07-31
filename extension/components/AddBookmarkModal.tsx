@@ -1,9 +1,17 @@
 import { useState } from 'react';
 import { X } from 'lucide-react';
+import FaviconField from './FaviconField';
 
 interface AddBookmarkModalProps {
   collectionId: string;
-  onSave: (params: { collectionId: string; title: string; url: string; description?: string; tags?: string[] }) => Promise<void>;
+  onSave: (params: {
+    collectionId: string;
+    title: string;
+    url: string;
+    description?: string;
+    favicon?: string;
+    tags?: string[];
+  }) => Promise<void>;
   onClose: () => void;
 }
 
@@ -12,6 +20,7 @@ export default function AddBookmarkModal({ collectionId, onSave, onClose }: AddB
   const [url, setUrl] = useState('');
   const [description, setDescription] = useState('');
   const [tags, setTags] = useState('');
+  const [favicon, setFavicon] = useState('');
   const [saving, setSaving] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -24,6 +33,7 @@ export default function AddBookmarkModal({ collectionId, onSave, onClose }: AddB
         title: title.trim(),
         url: url.trim(),
         description: description.trim() || undefined,
+        favicon: favicon.trim() || undefined,
         tags: tags ? tags.split(',').map((t) => t.trim()).filter(Boolean) : undefined,
       });
     } finally {
@@ -50,6 +60,7 @@ export default function AddBookmarkModal({ collectionId, onSave, onClose }: AddB
           <Field label="Title" value={title} onChange={setTitle} placeholder="Page title" />
           <Field label="Description" value={description} onChange={setDescription} placeholder="Optional" />
           <Field label="Tags" value={tags} onChange={setTags} placeholder="comma separated" />
+          <FaviconField value={favicon} onChange={setFavicon} pageUrl={url} title={title} />
         </div>
 
         <div className="mt-5 flex justify-end gap-2">
