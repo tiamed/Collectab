@@ -14,5 +14,9 @@ export default defineConfig({
     name: 'Collectab',
     description: 'A Toby-like bookmark manager with organizations, collections, and real-time sync',
     permissions: ['bookmarks', 'tabs', 'storage'],
+    // Loro CRDT compiles inlined WASM at runtime; MV3 default CSP blocks it in production.
+    content_security_policy: {
+      extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';",
+    },
   },
 });
