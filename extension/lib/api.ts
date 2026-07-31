@@ -305,6 +305,13 @@ export async function getBookmarks(collectionId: string): Promise<Bookmark[]> {
   return data.bookmarks;
 }
 
+export async function getBookmarksBySpace(spaceId: string): Promise<Record<string, Bookmark[]>> {
+  const data = await request<{ bookmarksByCollection: Record<string, Bookmark[]> }>(
+    `/bookmarks?spaceId=${encodeURIComponent(spaceId)}`,
+  );
+  return data.bookmarksByCollection;
+}
+
 export async function createBookmark(params: {
   collectionId: string;
   title: string;
@@ -399,10 +406,11 @@ export async function exportData(orgId?: string | null): Promise<ExportData> {
 
   for (const space of allSpaces) {
     const cols = await getCollections(space.id);
+    const byCollection = await getBookmarksBySpace(space.id);
     const exportCols: ExportData['spaces'][0]['collections'] = [];
 
     for (const col of cols) {
-      const bks = await getBookmarks(col.id);
+      const bks = byCollection[col.id] || [];
       exportCols.push({
         name: col.name,
         icon: col.icon,

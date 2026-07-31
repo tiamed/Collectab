@@ -14,30 +14,43 @@ vi.mock('../src/database/client.js', () => {
     createdAt: new Date(),
     updatedAt: new Date(),
   };
+  const mockSpace = {
+    id: 'space-1',
+    ownerId: 'user-123',
+    orgId: null,
+    name: 'Test Space',
+    icon: '💼',
+    orderIndex: 0,
+    createdAt: new Date(),
+  };
 
-  let selectCallCount = 0;
+  function makeChain(rows: any[]) {
+    const chain: any = {
+      innerJoin: () => chain,
+      where: () => chain,
+      orderBy: () => Promise.resolve(rows),
+      then: (resolve: (v: any) => any, reject?: (e: any) => any) =>
+        Promise.resolve(rows).then(resolve, reject),
+    };
+    return chain;
+  }
 
   const mockDb = {
-    select: (cols?: any) => {
-      selectCallCount++;
-      return {
-        from: (table: any) => ({
-          where: (condition: any) => {
-            // The bookmarks route does multiple selects:
-            // 1st: collection ownership check -> return collection
-            // 2nd: max order or bookmark lookup -> return bookmark data
-            const result = {
-              orderBy: () => Promise.resolve(mockBookmarks),
-              then: undefined as any,
-            };
-            // Make it thenable to support await without .orderBy()
-            result.then = (resolve: any) => resolve([mockCollection]);
-            return result;
-          },
-        }),
-      };
-    },
-    insert: (table: any) => ({
+    select: (cols?: any) => ({
+      from: () => {
+        // select({ id }) for collections in space
+        if (cols && typeof cols === 'object' && 'id' in cols && !('title' in cols) && !('collectionId' in cols) && Object.keys(cols).length <= 2) {
+          return makeChain([{ id: mockCollection.id }]);
+        }
+        // select bookmark fields for space batch
+        if (cols && typeof cols === 'object' && 'collectionId' in cols && 'title' in cols) {
+          return makeChain(mockBookmarks);
+        }
+        // default: access checks + single-collection lists
+        return makeChain([mockCollection, mockSpace]);
+      },
+    }),
+    insert: () => ({
       values: (data: any) => ({
         returning: () => {
           if (Array.isArray(data)) {
@@ -61,14 +74,14 @@ vi.mock('../src/database/client.js', () => {
         },
       }),
     }),
-    update: (table: any) => ({
+    update: () => ({
       set: (data: any) => ({
         where: () => ({
           returning: () => Promise.resolve([{ ...mockBookmarks[0], ...data }]),
         }),
       }),
     }),
-    delete: (table: any) => ({
+    delete: () => ({
       where: () => Promise.resolve(),
     }),
     execute: () => Promise.resolve({ rows: [] }),
@@ -88,11 +101,19 @@ describe('Bookmarks routes', () => {
       expect(res.status).toBe(401);
     });
 
-    it('requires collectionId param', async () => {
+    it('requires exactly one of collectionId or spaceId', async () => {
       const res = await app.request('/api/bookmarks', { headers: authHeader });
       expect(res.status).toBe(400);
       const body = await res.json();
-      expect(body.error).toContain('collectionId');
+      expect(body.error).toContain('collectionId or spaceId');
+    });
+
+    it('rejects both collectionId and spaceId', async () => {
+      const res = await app.request(
+        '/api/bookmarks?collectionId=550e8400-e29b-41d4-a716-446655440000&spaceId=550e8400-e29b-41d4-a716-446655440001',
+        { headers: authHeader },
+      );
+      expect(res.status).toBe(400);
     });
 
     it('returns bookmarks for valid collection', async () => {
@@ -102,6 +123,17 @@ describe('Bookmarks routes', () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body).toHaveProperty('bookmarks');
+    });
+
+    it('returns bookmarksByCollection for valid spaceId', async () => {
+      const res = await app.request('/api/bookmarks?spaceId=550e8400-e29b-41d4-a716-446655440001', {
+        headers: authHeader,
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body).toHaveProperty('bookmarksByCollection');
+      expect(body.bookmarksByCollection).toHaveProperty('col-abc');
+      expect(Array.isArray(body.bookmarksByCollection['col-abc'])).toBe(true);
     });
   });
 

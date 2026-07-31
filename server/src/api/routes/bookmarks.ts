@@ -3,7 +3,7 @@ import { zValidator } from '@hono/zod-validator';
 import { eq, and, asc, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { getDb } from '../../database/client.js';
-import { bookmarks, collections, spaces, organizations, orgMembers } from '../../database/schema.js';
+import { bookmarks, collections, spaces, organizations, orgMembers, spaceMembers } from '../../database/schema.js';
 import { authMiddleware, type AuthEnv } from '../middleware/auth.js';
 
 async function hasCollectionAccess(db: ReturnType<typeof getDb>, collectionId: string, userId: string): Promise<boolean> {
@@ -13,6 +13,25 @@ async function hasCollectionAccess(db: ReturnType<typeof getDb>, collectionId: s
 
   const [space] = await db.select().from(spaces).where(eq(spaces.id, col.spaceId));
   if (!space?.orgId) return false;
+
+  const [org] = await db.select().from(organizations).where(eq(organizations.id, space.orgId));
+  if (org?.ownerId === userId) return true;
+
+  const [membership] = await db.select().from(orgMembers)
+    .where(and(eq(orgMembers.orgId, space.orgId), eq(orgMembers.userId, userId)));
+  return !!membership;
+}
+
+async function hasSpaceAccess(db: ReturnType<typeof getDb>, spaceId: string, userId: string): Promise<boolean> {
+  const [space] = await db.select().from(spaces).where(eq(spaces.id, spaceId));
+  if (!space) return false;
+  if (space.ownerId === userId) return true;
+
+  const [sm] = await db.select().from(spaceMembers)
+    .where(and(eq(spaceMembers.spaceId, spaceId), eq(spaceMembers.userId, userId)));
+  if (sm) return true;
+
+  if (!space.orgId) return false;
 
   const [org] = await db.select().from(organizations).where(eq(organizations.id, space.orgId));
   if (org?.ownerId === userId) return true;
@@ -66,19 +85,59 @@ bookmarkRoutes.get('/', async (c) => {
   const db = getDb();
   const userId = c.get('userId');
   const collectionId = c.req.query('collectionId');
+  const spaceId = c.req.query('spaceId');
 
-  if (!collectionId) {
-    return c.json({ error: 'collectionId query param required' }, 400);
+  if ((!collectionId && !spaceId) || (collectionId && spaceId)) {
+    return c.json({ error: 'Provide exactly one of collectionId or spaceId' }, 400);
   }
 
-  if (!(await hasCollectionAccess(db, collectionId, userId))) {
+  if (spaceId) {
+    if (!(await hasSpaceAccess(db, spaceId, userId))) {
+      return c.json({ error: 'Space not found' }, 404);
+    }
+
+    const cols = await db
+      .select({ id: collections.id })
+      .from(collections)
+      .where(eq(collections.spaceId, spaceId))
+      .orderBy(asc(collections.orderIndex));
+
+    const rows = await db
+      .select({
+        id: bookmarks.id,
+        collectionId: bookmarks.collectionId,
+        title: bookmarks.title,
+        url: bookmarks.url,
+        description: bookmarks.description,
+        favicon: bookmarks.favicon,
+        tags: bookmarks.tags,
+        orderIndex: bookmarks.orderIndex,
+        createdAt: bookmarks.createdAt,
+        updatedAt: bookmarks.updatedAt,
+      })
+      .from(bookmarks)
+      .innerJoin(collections, eq(bookmarks.collectionId, collections.id))
+      .where(eq(collections.spaceId, spaceId))
+      .orderBy(asc(collections.orderIndex), asc(bookmarks.orderIndex));
+
+    const bookmarksByCollection: Record<string, typeof rows> = {};
+    for (const col of cols) bookmarksByCollection[col.id] = [];
+    for (const row of rows) {
+      const list = bookmarksByCollection[row.collectionId] ?? (bookmarksByCollection[row.collectionId] = []);
+      list.push(row);
+    }
+
+    return c.json({ bookmarksByCollection });
+  }
+
+  if (!(await hasCollectionAccess(db, collectionId!, userId))) {
     return c.json({ error: 'Collection not found' }, 404);
   }
 
   const result = await db
     .select()
     .from(bookmarks)
-    .where(eq(bookmarks.collectionId, collectionId))
+    .where(eq(bookmarks.collectionId, collectionId!))
     .orderBy(asc(bookmarks.orderIndex));
 
   return c.json({ bookmarks: result });

@@ -120,7 +120,7 @@ export default function App() {
     reorder,
     reorderLocal,
     refetch: refetchBookmarks,
-  } = useCollectionBookmarks(collectionIds);
+  } = useCollectionBookmarks(activeSpaceId);
 
   const crdtOrderRef = useRef<CrdtOrderManager | null>(null);
   const bookmarksRef = useRef(bookmarksByCollection);

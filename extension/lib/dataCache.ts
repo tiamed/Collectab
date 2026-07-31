@@ -1,9 +1,9 @@
 import type { Space, Collection, Bookmark } from './api';
 
-const CACHE_KEY = 'data_cache_v1';
+const CACHE_KEY = 'data_cache_v2';
 const MAX_SPACES = 12;
 const MAX_COLLECTION_SETS = 12;
-const MAX_BOOKMARK_SETS = 40;
+const MAX_BOOKMARK_SPACES = 12;
 const TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days — long enough for idle sessions (e.g. watching a video)
 
 interface CacheEntry<T> {
@@ -11,16 +11,20 @@ interface CacheEntry<T> {
   updatedAt: number;
 }
 
+/** Bookmarks for one space, keyed by collectionId. */
+export type SpaceBookmarks = Record<string, Bookmark[]>;
+
 interface DataCache {
   spaces: Record<string, CacheEntry<Space[]>>;
   collections: Record<string, CacheEntry<Collection[]>>;
-  bookmarks: Record<string, CacheEntry<Bookmark[]>>;
+  /** Keyed by spaceId — matches GET /bookmarks?spaceId= */
+  bookmarksBySpace: Record<string, CacheEntry<SpaceBookmarks>>;
 }
 
 const emptyCache = (): DataCache => ({
   spaces: {},
   collections: {},
-  bookmarks: {},
+  bookmarksBySpace: {},
 });
 
 let memory: DataCache = emptyCache();
@@ -53,7 +57,7 @@ function scheduleSave() {
   saveTimer = setTimeout(() => {
     pruneRecord(memory.spaces, MAX_SPACES);
     pruneRecord(memory.collections, MAX_COLLECTION_SETS);
-    pruneRecord(memory.bookmarks, MAX_BOOKMARK_SETS);
+    pruneRecord(memory.bookmarksBySpace, MAX_BOOKMARK_SPACES);
     chrome.storage.local.set({ [CACHE_KEY]: memory }).catch(() => {});
   }, 200);
 }
@@ -64,9 +68,25 @@ export async function ensureDataCacheLoaded() {
   loadPromise = (async () => {
     try {
       if (typeof chrome !== 'undefined' && chrome.storage?.local) {
-        const stored = await chrome.storage.local.get(CACHE_KEY);
+        const stored = await chrome.storage.local.get([CACHE_KEY, 'data_cache_v1']);
         if (stored[CACHE_KEY]) {
           memory = { ...emptyCache(), ...stored[CACHE_KEY] };
+          if (!memory.bookmarksBySpace) memory.bookmarksBySpace = {};
+          // Drop legacy per-collection bookmark map if present
+          delete (memory as DataCache & { bookmarks?: unknown }).bookmarks;
+        } else if (stored['data_cache_v1']) {
+          const v1 = stored['data_cache_v1'] as {
+            spaces?: DataCache['spaces'];
+            collections?: DataCache['collections'];
+          };
+          memory = {
+            ...emptyCache(),
+            spaces: v1.spaces || {},
+            collections: v1.collections || {},
+            bookmarksBySpace: {},
+          };
+          scheduleSave();
+          chrome.storage.local.remove('data_cache_v1').catch(() => {});
         }
       }
     } catch {
@@ -96,11 +116,21 @@ export function setCachedCollections(spaceId: string, data: Collection[]) {
   scheduleSave();
 }
 
-export function getCachedBookmarks(collectionId: string): Bookmark[] | null {
-  return getEntry(memory.bookmarks, collectionId);
+export function getCachedBookmarksBySpace(spaceId: string): SpaceBookmarks | null {
+  return getEntry(memory.bookmarksBySpace, spaceId);
 }
 
-export function setCachedBookmarks(collectionId: string, data: Bookmark[]) {
-  memory.bookmarks[collectionId] = { data, updatedAt: Date.now() };
+export function setCachedBookmarksBySpace(spaceId: string, data: SpaceBookmarks) {
+  memory.bookmarksBySpace[spaceId] = { data, updatedAt: Date.now() };
   scheduleSave();
+}
+
+/** Patch one collection inside a space cache entry. */
+export function setCachedBookmarksForCollection(
+  spaceId: string,
+  collectionId: string,
+  bookmarks: Bookmark[],
+) {
+  const existing = getCachedBookmarksBySpace(spaceId) || {};
+  setCachedBookmarksBySpace(spaceId, { ...existing, [collectionId]: bookmarks });
 }
