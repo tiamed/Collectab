@@ -105,7 +105,7 @@ export default function ContentArea({
     setActiveId(event.active.id as string);
   }
 
-  const dropTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const dropTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const clearOverlay = useCallback(() => {
     if (dropTimerRef.current) clearTimeout(dropTimerRef.current);

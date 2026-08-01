@@ -41,7 +41,7 @@ function SortableSpaceRow({
     id: space.id,
   });
   const style = {
-    transform: CSS.Transform.toString(transform ? { x: 0, y: transform.y, scaleX: 1, scaleY: 1 } : undefined),
+    transform: CSS.Transform.toString(transform ? { x: 0, y: transform.y, scaleX: 1, scaleY: 1 } : null),
     transition,
     opacity: isDragging ? 0.4 : undefined,
   };
