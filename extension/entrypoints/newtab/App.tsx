@@ -17,6 +17,7 @@ import { loadApiBase, isLoggedIn, createCollection, createSpace, createOrganizat
 import type { Bookmark, User } from '@/lib/api';
 import { CrdtOrderManager } from '@/lib/crdt-order-mgr';
 import { CrdtSyncClient } from '@/lib/crdt-sync-port';
+import { collectCrdtIds, diffRemovedIds, reconcileCrdtOrder } from '@/lib/crdt-reconcile';
 import { ensureDataCacheLoaded, getCachedUser } from '@/lib/dataCache';
 
 const STORAGE_KEY_ORG = 'active_org_id';
@@ -135,21 +136,20 @@ export default function App() {
   bookmarksRef.current = bookmarksByCollection;
   collectionsRef.current = collections;
 
+  // IDs a remote tab removed from the CRDT entirely (diffed per WS update).
+  // Without this, stale REST data would make a remotely deleted bookmark look
+  // "new" here and it would get re-added.
+  const removedIdsRef = useRef<Set<string>>(new Set());
+
   const applyCrdtOrderToUi = useCallback((mgr: CrdtOrderManager) => {
-    for (const col of collectionsRef.current) {
-      const ids = mgr.getOrderedIds(col.id);
-      const current = bookmarksRef.current[col.id] || [];
-      if (ids.length === 0 && current.length === 0) continue;
-      const byId = new Map(current.map((b) => [b.id, b]));
-      const ordered = ids.map((id) => byId.get(id)).filter(Boolean) as Bookmark[];
-      const seen = new Set(ordered.map((b) => b.id));
-      // Keep REST-created bookmarks that CRDT has not caught up with yet
-      const extras = current.filter((b) => !seen.has(b.id));
-      for (const b of extras) {
-        if (mgr.isReady) mgr.addToEnd(col.id, b.id);
-      }
-      const merged = [...ordered, ...extras];
-      if (merged.length > 0) reorderLocal(col.id, merged);
+    const reconciled = reconcileCrdtOrder(
+      mgr,
+      collectionsRef.current,
+      bookmarksRef.current,
+      removedIdsRef.current,
+    );
+    for (const [colId, merged] of Object.entries(reconciled)) {
+      reorderLocal(colId, merged);
     }
   }, [reorderLocal]);
 
@@ -161,6 +161,7 @@ export default function App() {
     const mgr = new CrdtOrderManager();
     const client = new CrdtSyncClient();
     crdtOrderRef.current = mgr;
+    removedIdsRef.current = new Set();
 
     mgr.init(activeSpaceId, (updateBytes) => {
       client.send(updateBytes);
@@ -170,7 +171,13 @@ export default function App() {
       if (!mgr.isReady) {
         mgr.bootstrapWithSnapshot(updateBytes);
       } else {
+        const before = collectCrdtIds(mgr, collectionsRef.current);
         mgr.applyRemoteUpdate(updateBytes);
+        const after = collectCrdtIds(mgr, collectionsRef.current);
+        // IDs gone from every CRDT list were deleted by a remote tab.
+        for (const id of diffRemovedIds(before, after)) {
+          removedIdsRef.current.add(id);
+        }
       }
       if (mgr.isReady) applyCrdtOrderToUi(mgr);
     });
@@ -361,6 +368,45 @@ export default function App() {
     }
   }, [update]);
 
+  const handleUpdateBookmark = useCallback(async (
+    id: string,
+    updates: Partial<Bookmark>,
+  ): Promise<Bookmark> => {
+    let srcCol: string | null = null;
+    for (const [colId, bks] of Object.entries(bookmarksByCollection)) {
+      if (bks.some((b) => b.id === id)) {
+        srcCol = colId;
+        break;
+      }
+    }
+    const dstCol = updates.collectionId ?? null;
+    const isMove = !!srcCol && !!dstCol && srcCol !== dstCol;
+
+    const clean: Parameters<typeof update>[1] = {
+      title: updates.title,
+      url: updates.url,
+      description: updates.description ?? undefined,
+      favicon: updates.favicon ?? undefined,
+      tags: updates.tags,
+      collectionId: updates.collectionId,
+    };
+
+    if (isMove) {
+      const mgr = crdtOrderRef.current;
+      if (mgr?.isReady) {
+        const srcIds = mgr.getOrderedIds(srcCol!);
+        const from = srcIds.indexOf(id);
+        if (from !== -1) {
+          const toIndex = mgr.getOrderedIds(dstCol!).length;
+          mgr.moveAcross(id, srcCol!, from, dstCol!, toIndex);
+          clean.orderIndex = toIndex;
+        }
+      }
+    }
+
+    return update(id, clean);
+  }, [update, bookmarksByCollection]);
+
   const handleAddBookmark = useCallback(async (params: {
     collectionId: string;
     title: string;
@@ -494,7 +540,7 @@ export default function App() {
           collections={collections}
           bookmarksByCollection={filteredBookmarks}
           loading={colsLoading || bksLoading}
-          onUpdateBookmark={update}
+          onUpdateBookmark={handleUpdateBookmark}
           onDeleteBookmark={handleDeleteBookmark}
           onAddBookmark={handleAddBookmark}
           onRenameCollection={handleRenameCollection}
