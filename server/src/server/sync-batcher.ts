@@ -59,10 +59,13 @@ export class SyncBatcher {
          WHERE collection_id IN (SELECT id FROM collections WHERE space_id = $1)`,
         [spaceId],
       );
+      // The CRDT lists are the authority for membership AND ordering within a
+      // space. Setting collection_id here (not just order_index) means a
+      // cross-collection move persists even if only a CRDT op was relayed.
       await client.query(
-        `UPDATE bookmarks AS b SET order_index = v.order_index
+        `UPDATE bookmarks AS b SET collection_id = v.collection_id, order_index = v.order_index
          FROM (VALUES ${values.join(', ')}) AS v(id, collection_id, order_index)
-         WHERE b.id = v.id AND b.collection_id = v.collection_id`,
+         WHERE b.id = v.id`,
         params,
       );
       await client.query('COMMIT');

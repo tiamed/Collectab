@@ -32,6 +32,7 @@ describe('SyncBatcher', () => {
 
     expect(queries[0]).toBe('BEGIN');
     expect(queries[1]).toContain('SET order_index = -1');
+    expect(queries[2]).toContain('SET collection_id = v.collection_id, order_index = v.order_index');
     expect(queries[2]).toContain('FROM (VALUES ');
     expect(queries[2]).toContain('::uuid');
     expect(queries[3]).toBe('COMMIT');
