@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { DndContext, PointerSensor, useSensor, useSensors, DragOverlay, closestCorners, closestCenter, MeasuringStrategy, type CollisionDetection, type DragEndEvent, type DragOverEvent, type DragStartEvent } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
-import { ChevronDown, ChevronRight, Plus, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, MoreHorizontal, Pencil, Trash2, Settings } from 'lucide-react';
 import BookmarkCard from './BookmarkCard';
 import EditBookmarkModal from './EditBookmarkModal';
 import AddBookmarkModal from './AddBookmarkModal';
 import DraggableBookmarkList from './DraggableBookmarkList';
+import IconDisplay from './IconDisplay';
 import type { Collection, Bookmark } from '@/lib/api';
 
 interface ContentAreaProps {
@@ -18,6 +19,7 @@ interface ContentAreaProps {
   onAddBookmark: (params: { collectionId: string; title: string; url: string; description?: string; favicon?: string; tags?: string[] }) => Promise<Bookmark>;
   onRenameCollection: (id: string, name: string) => void;
   onDeleteCollection: (id: string) => void;
+  onOpenCollectionSettings: (collection: Collection) => void;
   onCollectionReorder: (collectionId: string, orderedBookmarks: Bookmark[], meta: { bookmarkId: string; fromIndex: number; toIndex: number }) => void;
   onTransferBookmark: (bookmarkId: string, fromCollectionId: string, targetCollectionId: string, newIndex: number) => Promise<void>;
   allCollapsed: boolean | null;
@@ -34,6 +36,7 @@ export default function ContentArea({
   onAddBookmark,
   onRenameCollection,
   onDeleteCollection,
+  onOpenCollectionSettings,
   onCollectionReorder,
   onTransferBookmark,
   allCollapsed,
@@ -421,7 +424,10 @@ export default function ContentArea({
                   }}
                 />
               ) : (
-                <h2 className="text-sm font-semibold text-[var(--foreground)]">{collection.name}</h2>
+                <h2 className="flex items-center gap-1.5 text-sm font-semibold text-[var(--foreground)]">
+                  <IconDisplay icon={collection.icon} fallback="📁" className="flex size-4 items-center justify-center text-sm leading-none" imgClassName="size-4 rounded-sm object-contain" />
+                  {collection.name}
+                </h2>
               )}
 
               <span className="text-[10px] text-[var(--muted)]">{bookmarks.length}</span>
@@ -456,6 +462,16 @@ export default function ContentArea({
                   >
                     <Pencil className="size-3" />
                     Rename
+                  </button>
+                  <button
+                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] text-[var(--foreground)] hover:bg-[var(--background)]"
+                    onClick={() => {
+                      setMenuColId(null);
+                      onOpenCollectionSettings(collection);
+                    }}
+                  >
+                    <Settings className="size-3" />
+                    Settings
                   </button>
                   <button
                     className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] text-red-400 hover:bg-[var(--background)]"

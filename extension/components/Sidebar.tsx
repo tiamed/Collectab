@@ -2,8 +2,9 @@ import { useState, useRef, useEffect } from 'react';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Search, Layers, Settings, LogOut, Plus, Pencil, Trash2, MoreHorizontal, Building2, ChevronDown } from 'lucide-react';
+import { Search, Layers, Settings, LogOut, Plus, Pencil, Trash2, MoreHorizontal, ChevronDown } from 'lucide-react';
 import ThemeToggle from './ThemeToggle';
+import IconDisplay from './IconDisplay';
 import type { Space, User, Organization } from '@/lib/api';
 
 function SortableSpaceRow({
@@ -18,6 +19,7 @@ function SortableSpaceRow({
   onStartRename,
   onDelete,
   onToggleMenu,
+  onOpenSettings,
   onEditNameChange,
   onCommitRename,
   onEditKeyDown,
@@ -33,6 +35,7 @@ function SortableSpaceRow({
   onStartRename: () => void;
   onDelete: () => void;
   onToggleMenu: () => void;
+  onOpenSettings: () => void;
   onEditNameChange: (v: string) => void;
   onCommitRename: () => void;
   onEditKeyDown: (e: React.KeyboardEvent) => void;
@@ -73,7 +76,9 @@ function SortableSpaceRow({
         }`}
         onClick={(e) => { e.stopPropagation(); onSelect(); }}
       >
-        <span className="text-[10px] text-[var(--muted)]">●</span>
+        <span className="flex size-3.5 items-center justify-center">
+          <IconDisplay icon={space.icon} fallback="●" className="text-xs leading-none" imgClassName="size-3.5 rounded-sm object-contain" />
+        </span>
         <span className="text-xs">{space.name}</span>
       </button>
       <button
@@ -93,6 +98,13 @@ function SortableSpaceRow({
           >
             <Pencil className="size-3" />
             Rename
+          </button>
+          <button
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] text-[var(--foreground)] hover:bg-[var(--background)]"
+            onClick={(e) => { e.stopPropagation(); onOpenSettings(); }}
+          >
+            <Settings className="size-3" />
+            Settings
           </button>
           <button
             className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] text-red-400 hover:bg-[var(--background)]"
@@ -116,12 +128,14 @@ interface SidebarProps {
   onRenameOrg: (id: string, currentName: string) => void;
   onRenamePersonal: () => void;
   onDeleteOrg: (id: string, name: string) => void;
+  onOpenOrgSettings: (org: Organization) => void;
   spaces: Space[];
   activeSpaceId: string | null;
   onSpaceSelect: (id: string) => void;
   onAddSpace: () => void;
   onRenameSpace: (id: string, name: string) => void;
   onDeleteSpace: (id: string) => void;
+  onOpenSpaceSettings: (space: Space) => void;
   onReorderSpaces: (orderedIds: string[]) => void;
   searchQuery: string;
   onSearchChange: (q: string) => void;
@@ -141,6 +155,7 @@ export default function Sidebar({
   onRenameOrg,
   onRenamePersonal,
   onDeleteOrg,
+  onOpenOrgSettings,
   personalName,
   spaces,
   activeSpaceId,
@@ -148,6 +163,7 @@ export default function Sidebar({
   onAddSpace,
   onRenameSpace,
   onDeleteSpace,
+  onOpenSpaceSettings,
   onReorderSpaces,
   searchQuery,
   onSearchChange,
@@ -234,7 +250,13 @@ export default function Sidebar({
           onClick={() => setShowOrgDropdown(!showOrgDropdown)}
           className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-[var(--surface)]"
         >
-          <Building2 className="size-4 text-[var(--accent)]" strokeWidth={1.5} />
+          <span className="flex size-4 items-center justify-center">
+            {activeOrg ? (
+              <IconDisplay icon={activeOrg.icon} className="text-sm leading-none" imgClassName="size-4 rounded-sm object-contain" />
+            ) : (
+              <Layers className="size-4 text-[var(--accent)]" strokeWidth={1.5} />
+            )}
+          </span>
           <span className="flex-1 truncate text-[13px] font-semibold text-[var(--foreground)]">
             {activeOrg?.name ?? personalName}
           </span>
@@ -269,12 +291,21 @@ export default function Sidebar({
                   }`}
                   onClick={() => { onOrgSelect(org.id); setShowOrgDropdown(false); }}
                 >
-                  <Building2 className="size-3.5 text-[var(--muted)]" strokeWidth={1.5} />
+                  <span className="flex size-3.5 items-center justify-center">
+                    <IconDisplay icon={org.icon} className="text-xs leading-none" imgClassName="size-3.5 rounded-sm object-contain" />
+                  </span>
                   <span className="flex-1 truncate">{org.name}</span>
                   <span className="text-[9px] text-[var(--muted)]">{org.role}</span>
                 </button>
                 {org.role === 'owner' && (
                   <div className="flex shrink-0 items-center gap-0.5 pr-2 opacity-0 group-hover/org:opacity-100">
+                    <button
+                      className="flex size-5 items-center justify-center rounded text-[var(--muted)] hover:text-[var(--foreground)]"
+                      onClick={(e) => { e.stopPropagation(); setShowOrgDropdown(false); onOpenOrgSettings(org); }}
+                      title="Settings"
+                    >
+                      <Settings className="size-2.5" />
+                    </button>
                     <button
                       className="flex size-5 items-center justify-center rounded text-[var(--muted)] hover:text-[var(--foreground)]"
                       onClick={(e) => { e.stopPropagation(); setShowOrgDropdown(false); onRenameOrg(org.id, org.name); }}
@@ -352,6 +383,7 @@ export default function Sidebar({
                 onStartRename={() => startRename(space)}
                 onDelete={() => handleDelete(space.id)}
                 onToggleMenu={() => setMenuSpaceId(menuSpaceId === space.id ? null : space.id)}
+                onOpenSettings={() => { setMenuSpaceId(null); onOpenSpaceSettings(space); }}
                 onEditNameChange={setEditName}
                 onCommitRename={commitRename}
                 onEditKeyDown={(e: React.KeyboardEvent) => {

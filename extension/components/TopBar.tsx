@@ -43,7 +43,7 @@ export default function TopBar({
         <button
           onClick={onOpenSettings}
           className="flex size-7 items-center justify-center rounded text-[var(--muted)] hover:bg-[var(--surface)]"
-          title="Settings"
+          title="Space settings"
         >
           <Settings className="size-4" strokeWidth={1.5} />
         </button>

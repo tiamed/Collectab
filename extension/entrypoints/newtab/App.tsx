@@ -4,6 +4,9 @@ import TopBar from '@/components/TopBar';
 import Toolbar from '@/components/Toolbar';
 import ContentArea from '@/components/ContentArea';
 import SettingsModal from '@/components/SettingsModal';
+import OrgSettingsModal from '@/components/OrgSettingsModal';
+import SpaceSettingsModal from '@/components/SpaceSettingsModal';
+import CollectionSettingsModal from '@/components/CollectionSettingsModal';
 import AuthModal from '@/components/AuthModal';
 import MembersModal from '@/components/MembersModal';
 import SortCollectionsModal from '@/components/SortCollectionsModal';
@@ -14,7 +17,7 @@ import { useOrganizations, useSpaces, useCollections, useCollectionBookmarks } f
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/useTheme';
 import { loadApiBase, isLoggedIn, createCollection, createSpace, createOrganization, updateOrganization, deleteOrganization, updateSpace, deleteSpace, deleteAllSpaces, updateCollection, deleteCollection } from '@/lib/api';
-import type { Bookmark, User } from '@/lib/api';
+import type { Bookmark, User, Organization, Space, Collection } from '@/lib/api';
 import { CrdtOrderManager } from '@/lib/crdt-order-mgr';
 import { CrdtSyncClient } from '@/lib/crdt-sync-port';
 import { collectCrdtIds, diffRemovedIds, reconcileCrdtOrder } from '@/lib/crdt-reconcile';
@@ -55,6 +58,9 @@ export default function App() {
   const [showAuth, setShowAuth] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
   const [showSortCollections, setShowSortCollections] = useState(false);
+  const [orgSettingsTarget, setOrgSettingsTarget] = useState<Organization | null>(null);
+  const [spaceSettingsTarget, setSpaceSettingsTarget] = useState<Space | null>(null);
+  const [collectionSettingsTarget, setCollectionSettingsTarget] = useState<Collection | null>(null);
 
   // Prompt modal state
   const [promptOpen, setPromptOpen] = useState(false);
@@ -332,6 +338,24 @@ export default function App() {
     refetchCollections();
   }, [refetchCollections, openConfirm]);
 
+  const handleSaveOrgSettings = useCallback(async (updates: { name?: string; icon?: string }) => {
+    if (!orgSettingsTarget) return;
+    await updateOrganization(orgSettingsTarget.id, updates);
+    refetchOrgs();
+  }, [orgSettingsTarget, refetchOrgs]);
+
+  const handleSaveSpaceSettings = useCallback(async (updates: { name?: string; icon?: string }) => {
+    if (!spaceSettingsTarget) return;
+    await updateSpace(spaceSettingsTarget.id, updates);
+    refetchSpaces();
+  }, [spaceSettingsTarget, refetchSpaces]);
+
+  const handleSaveCollectionSettings = useCallback(async (updates: { name?: string; icon?: string; color?: string }) => {
+    if (!collectionSettingsTarget) return;
+    await updateCollection(collectionSettingsTarget.id, updates);
+    refetchCollections();
+  }, [collectionSettingsTarget, refetchCollections]);
+
   const handleCollectionReorder = useCallback((
     collectionId: string,
     orderedBookmarks: Bookmark[],
@@ -540,12 +564,14 @@ export default function App() {
         onRenameOrg={handleRenameOrg}
         onRenamePersonal={handleRenamePersonal}
         onDeleteOrg={(id, name) => setDeleteOrgTarget({ id, name })}
+        onOpenOrgSettings={setOrgSettingsTarget}
         spaces={spaces}
         activeSpaceId={activeSpaceId}
         onSpaceSelect={setActiveSpaceId}
         onAddSpace={handleAddSpace}
         onRenameSpace={handleRenameSpace}
         onDeleteSpace={handleDeleteSpace}
+        onOpenSpaceSettings={setSpaceSettingsTarget}
         onReorderSpaces={handleReorderSpaces}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
@@ -562,7 +588,11 @@ export default function App() {
           collectionCount={collections.length}
           onAddCollection={handleAddCollection}
           onSortCollections={handleOpenSortCollections}
-          onOpenSettings={() => setShowSettings(true)}
+          onOpenSettings={() => {
+            const space = spaces.find((s) => s.id === activeSpaceId);
+            if (space) setSpaceSettingsTarget(space);
+            else setShowSettings(true);
+          }}
           onManageMembers={() => setShowMembers(true)}
         />
         <Toolbar
@@ -582,6 +612,7 @@ export default function App() {
           onAddBookmark={handleAddBookmark}
           onRenameCollection={handleRenameCollection}
           onDeleteCollection={handleDeleteCollection}
+          onOpenCollectionSettings={setCollectionSettingsTarget}
           onCollectionReorder={handleCollectionReorder}
           onTransferBookmark={handleTransferBookmark}
           allCollapsed={allCollapsed}
@@ -618,6 +649,28 @@ export default function App() {
           loading={colsLoading}
           onReorder={handleReorderCollections}
           onClose={() => setShowSortCollections(false)}
+        />
+      )}
+
+      {orgSettingsTarget && (
+        <OrgSettingsModal
+          org={orgSettingsTarget}
+          onSave={handleSaveOrgSettings}
+          onClose={() => setOrgSettingsTarget(null)}
+        />
+      )}
+      {spaceSettingsTarget && (
+        <SpaceSettingsModal
+          space={spaceSettingsTarget}
+          onSave={handleSaveSpaceSettings}
+          onClose={() => setSpaceSettingsTarget(null)}
+        />
+      )}
+      {collectionSettingsTarget && (
+        <CollectionSettingsModal
+          collection={collectionSettingsTarget}
+          onSave={handleSaveCollectionSettings}
+          onClose={() => setCollectionSettingsTarget(null)}
         />
       )}
 
