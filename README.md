@@ -1,12 +1,13 @@
 # Collectab
 
-A Toby-like browser extension bookmark manager with organizations, spaces, collections, drag-drop reorder, and real-time sync.
+A Toby-like browser extension bookmark manager with organizations, spaces, collections, drag-drop reorder, and CRDT-based real-time sync.
 
 ## Features
 
 - **Organizations** — isolate work/hobby/personal bookmarks; invite collaborators
 - **Spaces & Collections** — hierarchical organization (Org → Space → Collection → Bookmarks)
 - **Drag & Drop** — reorder bookmarks within/across collections and reorder spaces
+- **Real-time Sync** — Loro CRDT + WebSocket keeps bookmark order in sync across tabs
 - **Import / Export** — import from NiceTab, Toby, or a previous export; export all data as JSON
 - **Light & Dark Mode** — system-aware theme toggle
 - **Self-hostable** — configurable API server URL
@@ -23,7 +24,7 @@ A Toby-like browser extension bookmark manager with organizations, spaces, colle
 │   └── lib/
 ├── server/             # Hono API server
 │   └── src/
-│       ├── api/        # REST routes (auth, orgs, spaces, collections, bookmarks, import)
+│       ├── api/        # REST routes (auth, orgs, spaces, collections, bookmarks, search, import)
 │       └── database/   # PostgreSQL schema (Drizzle ORM)
 └── .github/workflows/  # CI + tag-based release
 ```
@@ -133,6 +134,7 @@ pnpm install
 pnpm dev          # Chrome dev mode with HMR
 pnpm dev:firefox  # Firefox dev mode
 pnpm build        # Production build
+pnpm test         # Run vitest unit tests (CRDT order, transfer flow, drag-back)
 pnpm zip          # Package as .zip for distribution
 ```
 
@@ -173,3 +175,4 @@ git push origin v0.1.0
 - **Extension**: WXT + React 19 + Tailwind CSS v4 + Lucide icons
 - **Server**: Hono + PostgreSQL + Drizzle ORM + JWT auth
 - **Drag & Drop**: @dnd-kit/core + @dnd-kit/sortable
+- **Real-time Sync**: Loro CRDT (loro-crdt) + WebSocket
