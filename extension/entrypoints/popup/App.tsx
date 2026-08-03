@@ -142,8 +142,8 @@ export default function App() {
   if (saved) {
     return (
       <div className="flex flex-col items-center justify-center gap-2 p-6">
-        <div className="flex size-10 items-center justify-center rounded-full bg-[var(--success)]/20">
-          <Check className="size-5 text-[var(--success)]" />
+        <div className="flex size-10 items-center justify-center rounded-full bg-[var(--accent)]/20">
+          <Check className="size-5 text-[var(--accent)]" />
         </div>
         <p className="text-sm font-medium text-[var(--foreground)]">Bookmark saved!</p>
         <p className="text-[10px] text-[var(--muted)]">
@@ -199,6 +199,7 @@ export default function App() {
         {/* Org selector */}
         {orgs.length > 0 && (
           <div className="mb-2">
+            <label className="mb-1 block text-[10px] font-medium text-[var(--muted)]">Organization</label>
             <div className="relative">
               <select
                 className="w-full appearance-none rounded border border-[var(--border)] bg-[var(--background)] px-2.5 py-1.5 pr-7 text-xs text-[var(--foreground)] outline-none focus:ring-1 focus:ring-[var(--accent)]"
@@ -217,6 +218,7 @@ export default function App() {
 
         {/* Space selector */}
         <div className="mb-2">
+          <label className="mb-1 block text-[10px] font-medium text-[var(--muted)]">Space</label>
           <div className="relative">
             <select
               className="w-full appearance-none rounded border border-[var(--border)] bg-[var(--background)] px-2.5 py-1.5 pr-7 text-xs text-[var(--foreground)] outline-none focus:ring-1 focus:ring-[var(--accent)]"
@@ -226,7 +228,7 @@ export default function App() {
             >
               {spaces.length === 0 && <option value="">No spaces</option>}
               {spaces.map((s) => (
-                <option key={s.id} value={s.id}>{s.icon} {s.name}</option>
+                <option key={s.id} value={s.id}>{s.name}</option>
               ))}
             </select>
             <ChevronDown className="pointer-events-none absolute right-2 top-1/2 size-3 -translate-y-1/2 text-[var(--muted)]" />
@@ -235,6 +237,7 @@ export default function App() {
 
         {/* Collection selector */}
         <div>
+          <label className="mb-1 block text-[10px] font-medium text-[var(--muted)]">Collection</label>
           <div className="relative">
             <select
               className="w-full appearance-none rounded border border-[var(--border)] bg-[var(--background)] px-2.5 py-1.5 pr-7 text-xs text-[var(--foreground)] outline-none focus:ring-1 focus:ring-[var(--accent)]"
@@ -244,7 +247,7 @@ export default function App() {
             >
               {collections.length === 0 && <option value="">No collections</option>}
               {collections.map((c) => (
-                <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
+                <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </select>
             <ChevronDown className="pointer-events-none absolute right-2 top-1/2 size-3 -translate-y-1/2 text-[var(--muted)]" />

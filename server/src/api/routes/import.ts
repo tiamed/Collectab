@@ -64,7 +64,7 @@ const nativeSchema = z.object({
         z.object({
           name: z.string(),
           icon: z.string().optional().default('📁'),
-          color: z.string().optional().default('#3b82f6'),
+          color: z.string().optional().default('#9761da'),
           orderIndex: z.number().optional().default(0),
           bookmarks: z.array(
             z.object({
@@ -134,7 +134,7 @@ importRoutes.post('/', zValidator('json', importSchema), async (c) => {
             ownerId: userId,
             name: group.groupName,
             icon: '📁',
-            color: '#3b82f6',
+            color: '#9761da',
             orderIndex: ci,
           })
           .returning();
@@ -201,7 +201,7 @@ importRoutes.post('/', zValidator('json', importSchema), async (c) => {
             ownerId: userId,
             name: list.title,
             icon: '📁',
-            color: '#3b82f6',
+            color: '#9761da',
             orderIndex: ci,
           })
           .returning();

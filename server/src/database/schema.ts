@@ -52,7 +52,7 @@ export const collections = pgTable('collections', {
   ownerId: uuid('owner_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
   name: varchar('name', { length: 255 }).notNull(),
   icon: varchar('icon', { length: 50 }).default('📁'),
-  color: varchar('color', { length: 7 }).default('#3b82f6'),
+  color: varchar('color', { length: 7 }).default('#9761da'),
   orderIndex: integer('order_index').default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),

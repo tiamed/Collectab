@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Search, Layers, Star, Settings, LogOut, Plus, Pencil, Trash2, MoreHorizontal, Building2, ChevronDown } from 'lucide-react';
+import { Search, Layers, Settings, LogOut, Plus, Pencil, Trash2, MoreHorizontal, Building2, ChevronDown } from 'lucide-react';
 import ThemeToggle from './ThemeToggle';
 import type { Space, User, Organization } from '@/lib/api';
 
@@ -52,7 +52,7 @@ function SortableSpaceRow({
         <div className="flex h-7 w-full items-center px-4">
           <input
             ref={editInputRef}
-            className="w-full rounded bg-[var(--background)] px-1.5 py-0.5 text-xs text-[var(--foreground)] outline-none ring-1 ring-[var(--success)]"
+            className="w-full rounded bg-[var(--background)] px-1.5 py-0.5 text-xs text-[var(--foreground)] outline-none ring-1 ring-[var(--accent)]"
             value={editName}
             onChange={(e) => onEditNameChange(e.target.value)}
             onBlur={onCommitRename}
@@ -73,11 +73,7 @@ function SortableSpaceRow({
         }`}
         onClick={(e) => { e.stopPropagation(); onSelect(); }}
       >
-        {space.icon === '⭐' ? (
-          <Star className="size-3 fill-[#f59e0b] text-[#f59e0b]" strokeWidth={1} />
-        ) : (
-          <span className="text-[10px] text-[var(--muted)]">●</span>
-        )}
+        <span className="text-[10px] text-[var(--muted)]">●</span>
         <span className="text-xs">{space.name}</span>
       </button>
       <button
@@ -238,7 +234,7 @@ export default function Sidebar({
           onClick={() => setShowOrgDropdown(!showOrgDropdown)}
           className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-[var(--surface)]"
         >
-          <Building2 className="size-4 text-[var(--success)]" strokeWidth={1.5} />
+          <Building2 className="size-4 text-[var(--accent)]" strokeWidth={1.5} />
           <span className="flex-1 truncate text-[13px] font-semibold text-[var(--foreground)]">
             {activeOrg?.name ?? personalName}
           </span>
@@ -250,7 +246,7 @@ export default function Sidebar({
             <div className="group/personal flex items-center">
               <button
                 className={`flex flex-1 items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-[var(--background)] ${
-                  !activeOrgId ? 'text-[var(--success)]' : 'text-[var(--foreground)]'
+                  !activeOrgId ? 'text-[var(--accent)]' : 'text-[var(--foreground)]'
                 }`}
                 onClick={() => { onOrgSelect(''); setShowOrgDropdown(false); }}
               >
@@ -269,11 +265,11 @@ export default function Sidebar({
               <div key={org.id} className="group/org flex items-center">
                 <button
                   className={`flex flex-1 items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-[var(--background)] ${
-                    activeOrgId === org.id ? 'text-[var(--success)]' : 'text-[var(--foreground)]'
+                    activeOrgId === org.id ? 'text-[var(--accent)]' : 'text-[var(--foreground)]'
                   }`}
                   onClick={() => { onOrgSelect(org.id); setShowOrgDropdown(false); }}
                 >
-                  <span className="text-[10px]">{org.icon}</span>
+                  <Building2 className="size-3.5 text-[var(--muted)]" strokeWidth={1.5} />
                   <span className="flex-1 truncate">{org.name}</span>
                   <span className="text-[9px] text-[var(--muted)]">{org.role}</span>
                 </button>
@@ -384,7 +380,7 @@ export default function Sidebar({
         {/* Account row */}
         <div className="flex h-9 items-center justify-between px-4">
           <div className="flex items-center gap-2 overflow-hidden">
-            <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-[var(--success)] text-[9px] font-bold text-[#12121a]">
+            <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-[var(--accent)] text-[9px] font-bold text-white">
               {user.name[0]?.toUpperCase()}
             </div>
             <span className="truncate text-xs text-[var(--foreground)]">{user.name}</span>

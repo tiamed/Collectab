@@ -9,7 +9,7 @@ vi.mock('../src/database/client.js', () => {
     ownerId: 'user-123',
     name: 'Test Col',
     icon: '📁',
-    color: '#3b82f6',
+    color: '#9761da',
     orderIndex: 0,
     createdAt: new Date(),
     updatedAt: new Date(),

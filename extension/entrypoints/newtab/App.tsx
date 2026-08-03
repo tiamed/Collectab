@@ -503,7 +503,7 @@ export default function App() {
         </div>
         <button
           onClick={() => setShowAuth(true)}
-          className="rounded bg-[var(--success)] px-6 py-2 text-sm font-medium text-[#12121a]"
+          className="rounded bg-[var(--accent)] px-6 py-2 text-sm font-medium text-white"
         >
           Sign In / Register
         </button>

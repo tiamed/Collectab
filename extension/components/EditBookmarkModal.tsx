@@ -82,7 +82,7 @@ export default function EditBookmarkModal({ bookmark, collections, onSave, onClo
           <button
             type="submit"
             disabled={saving || !title || !url}
-            className="rounded bg-[var(--success)] px-4 py-1.5 text-xs font-medium text-[#12121a] disabled:opacity-50"
+            className="rounded bg-[var(--accent)] px-4 py-1.5 text-xs font-medium text-white disabled:opacity-50"
           >
             {saving ? 'Saving...' : 'Save'}
           </button>

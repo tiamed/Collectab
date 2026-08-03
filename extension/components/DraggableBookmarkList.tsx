@@ -127,7 +127,7 @@ export default function DraggableBookmarkList({
       {bookmarks.length === 0 && (
         <button
           onClick={onAddClick}
-          className="flex w-[168px] items-center justify-center gap-1.5 rounded-md border border-dashed border-[var(--border)] p-4 text-xs text-[var(--muted)] hover:border-[var(--success)] hover:text-[var(--success)]"
+          className="flex w-[168px] items-center justify-center gap-1.5 rounded-md border border-dashed border-[var(--border)] p-4 text-xs text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
         >
           <Plus className="size-3.5" strokeWidth={2} />
           Add bookmark

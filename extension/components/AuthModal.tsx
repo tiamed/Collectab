@@ -157,7 +157,7 @@ export default function AuthModal({ onClose, onLogin, onRegister }: AuthModalPro
         <button
           type="submit"
           disabled={loading}
-          className="mt-5 w-full rounded bg-[var(--success)] py-2 text-xs font-medium text-[#12121a] disabled:opacity-50"
+          className="mt-5 w-full rounded bg-[var(--accent)] py-2 text-xs font-medium text-white disabled:opacity-50"
         >
           {loading ? 'Please wait...' : mode === 'login' ? 'Sign In' : 'Create Account'}
         </button>
@@ -169,7 +169,7 @@ export default function AuthModal({ onClose, onLogin, onRegister }: AuthModalPro
               <button
                 type="button"
                 onClick={() => { setMode('register'); setError(null); setHint(null); }}
-                className="text-[var(--success)] hover:underline"
+                className="text-[var(--accent)] hover:underline"
               >
                 Sign up
               </button>
@@ -180,7 +180,7 @@ export default function AuthModal({ onClose, onLogin, onRegister }: AuthModalPro
               <button
                 type="button"
                 onClick={() => { setMode('login'); setError(null); setHint(null); }}
-                className="text-[var(--success)] hover:underline"
+                className="text-[var(--accent)] hover:underline"
               >
                 Sign in
               </button>

@@ -136,12 +136,12 @@ export default function SettingsModal({ onClose, onImportDone, onServerChanged, 
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="rounded bg-[var(--success)] px-3 py-1.5 text-xs font-medium text-[#12121a] disabled:opacity-50"
+                className="rounded bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
               >
                 {saving ? 'Testing...' : 'Save & Test'}
               </button>
               {status === 'success' && (
-                <span className="text-[11px] text-[var(--success)]">Connected</span>
+                <span className="text-[11px] text-[var(--accent)]">Connected</span>
               )}
               {status === 'error' && (
                 <span className="text-[11px] text-red-400">Connection failed</span>
@@ -164,7 +164,7 @@ export default function SettingsModal({ onClose, onImportDone, onServerChanged, 
               {exporting ? 'Exporting...' : 'Export JSON'}
             </button>
             {exportStatus && (
-              <p className={`mt-2 text-[11px] ${exportStatus.startsWith('Error') ? 'text-red-400' : 'text-[var(--success)]'}`}>
+              <p className={`mt-2 text-[11px] ${exportStatus.startsWith('Error') ? 'text-red-400' : 'text-[var(--accent)]'}`}>
                 {exportStatus}
               </p>
             )}
@@ -224,7 +224,7 @@ export default function SettingsModal({ onClose, onImportDone, onServerChanged, 
               />
             </div>
             {importStatus && (
-              <p className={`mt-2 text-[11px] ${importStatus.startsWith('Error') ? 'text-red-400' : 'text-[var(--success)]'}`}>
+              <p className={`mt-2 text-[11px] ${importStatus.startsWith('Error') ? 'text-red-400' : 'text-[var(--accent)]'}`}>
                 {importStatus}
               </p>
             )}

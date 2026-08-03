@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical, X } from 'lucide-react';
+import { GripVertical, X, Folder } from 'lucide-react';
 import type { Collection } from '@/lib/api';
 
 interface SortCollectionsModalProps {
@@ -37,7 +37,7 @@ function SortableRow({ collection }: { collection: Collection }) {
       >
         <GripVertical className="size-3.5" strokeWidth={1.5} />
       </button>
-      <span className="text-sm leading-none">{collection.icon || '📁'}</span>
+      <Folder className="size-3.5 text-[var(--muted)]" strokeWidth={1.5} />
       <span className="min-w-0 flex-1 truncate text-xs font-medium text-[var(--foreground)]">
         {collection.name}
       </span>

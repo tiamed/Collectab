@@ -134,7 +134,7 @@ export default function MembersModal({ orgId, orgName, spaceId, spaceName, onClo
           <button
             type="submit"
             disabled={adding || !email.trim()}
-            className="flex items-center gap-1 rounded bg-[var(--success)] px-3 py-2 text-xs font-medium text-[#12121a] disabled:opacity-50"
+            className="flex items-center gap-1 rounded bg-[var(--accent)] px-3 py-2 text-xs font-medium text-white disabled:opacity-50"
           >
             <UserPlus className="size-3" />
             Add
@@ -150,7 +150,7 @@ export default function MembersModal({ orgId, orgName, spaceId, spaceName, onClo
           {owner && (
             <div className="flex items-center justify-between rounded bg-[var(--background)] px-3 py-2">
               <div className="flex items-center gap-2">
-                <div className="flex size-6 items-center justify-center rounded-full bg-[var(--success)] text-[10px] font-bold text-[#12121a]">
+                <div className="flex size-6 items-center justify-center rounded-full bg-[var(--accent)] text-[10px] font-bold text-white">
                   {owner.name[0]?.toUpperCase()}
                 </div>
                 <div>

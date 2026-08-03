@@ -77,7 +77,7 @@ collectionRoutes.post('/', zValidator('json', createSchema), async (c) => {
       ownerId: userId,
       name,
       icon: icon || '📁',
-      color: color || '#3b82f6',
+      color: color || '#9761da',
     })
     .returning();
 

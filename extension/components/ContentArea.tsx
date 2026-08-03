@@ -411,7 +411,7 @@ export default function ContentArea({
               {editingColId === collection.id ? (
                 <input
                   ref={editInputRef}
-                  className="rounded bg-[var(--background)] px-1.5 py-0.5 text-sm font-semibold text-[var(--foreground)] outline-none ring-1 ring-[var(--success)]"
+                  className="rounded bg-[var(--background)] px-1.5 py-0.5 text-sm font-semibold text-[var(--foreground)] outline-none ring-1 ring-[var(--accent)]"
                   value={editColName}
                   onChange={(e) => setEditColName(e.target.value)}
                   onBlur={commitRenameCol}

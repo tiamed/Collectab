@@ -49,10 +49,10 @@ export default function TopBar({
         </button>
         <button
           onClick={onAddCollection}
-          className="flex h-7 items-center gap-1.5 rounded-md bg-[var(--success)] px-3.5"
+          className="flex h-7 items-center gap-1.5 rounded-md bg-[var(--accent)] px-3.5"
           title="Add collection"
         >
-          <Plus className="size-[14px] text-[#12121a]" strokeWidth={2} />
+          <Plus className="size-[14px] text-white" strokeWidth={2} />
         </button>
       </div>
     </header>

@@ -29,7 +29,7 @@ export default function Toolbar({ tagFilter, onTagFilterChange, allTags, onExpan
         <button
           className={`flex h-7 items-center gap-1.5 rounded px-2.5 transition-colors ${
             tagFilter
-              ? 'bg-[var(--success)]/10 text-[var(--success)]'
+              ? 'bg-[var(--accent)]/10 text-[var(--accent)]'
               : 'text-[var(--muted)] hover:bg-[var(--surface)]'
           }`}
           onClick={() => setShowDropdown(!showDropdown)}
@@ -52,7 +52,7 @@ export default function Toolbar({ tagFilter, onTagFilterChange, allTags, onExpan
               <button
                 key={tag}
                 className={`flex w-full items-center px-3 py-1.5 text-left text-[11px] hover:bg-[var(--background)] ${
-                  tagFilter === tag ? 'text-[var(--success)]' : 'text-[var(--foreground)]'
+                  tagFilter === tag ? 'text-[var(--accent)]' : 'text-[var(--foreground)]'
                 }`}
                 onClick={() => { onTagFilterChange(tag); setShowDropdown(false); }}
               >
