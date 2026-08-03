@@ -214,6 +214,21 @@ export default function App() {
   }, [activeSpaceId, loggedIn, bksLoading, collectionIds, bookmarksByCollection]);
 
   const activeSpace = spaces.find((s) => s.id === activeSpaceId);
+  const activeOrg = orgs.find((o) => o.id === activeOrgId);
+
+  // Derive UI permissions from org role + space ownership (server remains the backstop)
+  const isSpaceOwner = !!activeSpace && (
+    activeSpace.ownerId === sessionUser?.id || activeOrg?.role === 'owner'
+  );
+  const canEditContent = isSpaceOwner || activeOrg?.role === 'admin';
+  const canManageMembers = activeOrgId
+    ? (activeOrg?.role === 'owner' || activeOrg?.role === 'admin')
+    : isSpaceOwner;
+  const canManageSpace = isSpaceOwner;
+  const canChangeOrgRoles = activeOrg?.role === 'owner';
+  const canCreateSpace = !activeOrgId || activeOrg?.role === 'owner' || activeOrg?.role === 'admin';
+  const canManageSpaceFn = (space: Space) =>
+    space.ownerId === sessionUser?.id || activeOrg?.role === 'owner';
 
   const allTags = useMemo(() => {
     const tags = new Set<string>();
@@ -350,7 +365,7 @@ export default function App() {
     refetchSpaces();
   }, [spaceSettingsTarget, refetchSpaces]);
 
-  const handleSaveCollectionSettings = useCallback(async (updates: { name?: string; icon?: string; color?: string }) => {
+  const handleSaveCollectionSettings = useCallback(async (updates: { name?: string; icon?: string }) => {
     if (!collectionSettingsTarget) return;
     await updateCollection(collectionSettingsTarget.id, updates);
     refetchCollections();
@@ -581,6 +596,8 @@ export default function App() {
         onLogout={handleLogout}
         theme={theme}
         onToggleTheme={toggleTheme}
+        canManageSpace={canManageSpaceFn}
+        canCreateSpace={canCreateSpace}
       />
       <main className="flex flex-1 flex-col overflow-hidden">
         <TopBar
@@ -594,6 +611,9 @@ export default function App() {
             else setShowSettings(true);
           }}
           onManageMembers={() => setShowMembers(true)}
+          canEditContent={canEditContent}
+          canManageMembers={canManageMembers}
+          canManageSpace={canManageSpace}
         />
         <Toolbar
           tagFilter={tagFilter}
@@ -617,6 +637,7 @@ export default function App() {
           onTransferBookmark={handleTransferBookmark}
           allCollapsed={allCollapsed}
           onResetCollapsed={() => setAllCollapsed(null)}
+          canEditContent={canEditContent}
         />
       </main>
 
@@ -640,6 +661,7 @@ export default function App() {
           spaceId={activeSpaceId}
           spaceName={activeSpace?.name ?? ''}
           onClose={() => setShowMembers(false)}
+          canChangeRoles={activeOrgId ? canChangeOrgRoles : true}
         />
       )}
 

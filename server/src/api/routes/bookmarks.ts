@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { getDb } from '../../database/client.js';
 import { bookmarks, collections, spaces, organizations, orgMembers, spaceMembers } from '../../database/schema.js';
 import { authMiddleware, type AuthEnv } from '../middleware/auth.js';
+import { canEditSpace } from './permissions.js';
 
 async function hasCollectionAccess(db: ReturnType<typeof getDb>, collectionId: string, userId: string): Promise<boolean> {
   const [col] = await db.select().from(collections).where(eq(collections.id, collectionId));
@@ -39,6 +40,22 @@ async function hasSpaceAccess(db: ReturnType<typeof getDb>, spaceId: string, use
   const [membership] = await db.select().from(orgMembers)
     .where(and(eq(orgMembers.orgId, space.orgId), eq(orgMembers.userId, userId)));
   return !!membership;
+}
+
+/** Resolve collection → space and require owner|editor for writes */
+async function requireCollectionEdit(
+  db: ReturnType<typeof getDb>,
+  collectionId: string,
+  userId: string,
+): Promise<{ ok: true } | { ok: false; status: 403 | 404; error: string }> {
+  const [col] = await db.select().from(collections).where(eq(collections.id, collectionId));
+  if (!col) return { ok: false, status: 404, error: 'Collection not found' };
+
+  const [space] = await db.select().from(spaces).where(eq(spaces.id, col.spaceId));
+  if (!space || !(await canEditSpace(db, space, userId))) {
+    return { ok: false, status: 403, error: 'Forbidden' };
+  }
+  return { ok: true };
 }
 
 const createSchema = z.object({
@@ -148,8 +165,9 @@ bookmarkRoutes.put('/reorder', zValidator('json', reorderSchema), async (c) => {
   const userId = c.get('userId');
   const { collectionId, bookmarkIds } = c.req.valid('json');
 
-  if (!(await hasCollectionAccess(db, collectionId, userId))) {
-    return c.json({ error: 'Collection not found' }, 404);
+  const access = await requireCollectionEdit(db, collectionId, userId);
+  if (!access.ok) {
+    return c.json({ error: access.error }, access.status);
   }
 
   const existing = await db
@@ -181,8 +199,9 @@ bookmarkRoutes.post('/', zValidator('json', createSchema), async (c) => {
   const userId = c.get('userId');
   const body = c.req.valid('json');
 
-  if (!(await hasCollectionAccess(db, body.collectionId, userId))) {
-    return c.json({ error: 'Collection not found' }, 404);
+  const access = await requireCollectionEdit(db, body.collectionId, userId);
+  if (!access.ok) {
+    return c.json({ error: access.error }, access.status);
   }
 
   const [maxOrder] = await db
@@ -211,8 +230,9 @@ bookmarkRoutes.post('/batch', zValidator('json', batchCreateSchema), async (c) =
   const userId = c.get('userId');
   const body = c.req.valid('json');
 
-  if (!(await hasCollectionAccess(db, body.collectionId, userId))) {
-    return c.json({ error: 'Collection not found' }, 404);
+  const access = await requireCollectionEdit(db, body.collectionId, userId);
+  if (!access.ok) {
+    return c.json({ error: access.error }, access.status);
   }
 
   const values = body.bookmarks.map((b, i) => ({
@@ -240,12 +260,14 @@ bookmarkRoutes.put('/:id', zValidator('json', updateSchema), async (c) => {
     return c.json({ error: 'Bookmark not found' }, 404);
   }
 
-  if (!(await hasCollectionAccess(db, existing.collectionId, userId))) {
-    return c.json({ error: 'Bookmark not found' }, 404);
+  const access = await requireCollectionEdit(db, existing.collectionId, userId);
+  if (!access.ok) {
+    return c.json({ error: access.error }, access.status);
   }
 
   if (body.collectionId && body.collectionId !== existing.collectionId) {
-    if (!(await hasCollectionAccess(db, body.collectionId, userId))) {
+    const targetAccess = await requireCollectionEdit(db, body.collectionId, userId);
+    if (!targetAccess.ok) {
       return c.json({ error: 'Target collection not found' }, 404);
     }
   }
@@ -273,8 +295,9 @@ bookmarkRoutes.delete('/:id', async (c) => {
     return c.json({ error: 'Bookmark not found' }, 404);
   }
 
-  if (!(await hasCollectionAccess(db, existing.collectionId, userId))) {
-    return c.json({ error: 'Bookmark not found' }, 404);
+  const access = await requireCollectionEdit(db, existing.collectionId, userId);
+  if (!access.ok) {
+    return c.json({ error: access.error }, access.status);
   }
 
   await db.delete(bookmarks).where(eq(bookmarks.id, id));

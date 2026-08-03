@@ -3,18 +3,37 @@ import { createTestApp, generateTestToken } from './helpers.js';
 
 vi.mock('../src/database/client.js', () => {
   const mockCollections: any[] = [];
+  const mockSpace = {
+    id: '550e8400-e29b-41d4-a716-446655440000',
+    ownerId: 'user-123',
+    orgId: null,
+    name: 'Personal',
+    icon: '💼',
+    orderIndex: 0,
+    createdAt: new Date(),
+  };
+
+  function makeChain(rows: any[]) {
+    const chain: any = {
+      innerJoin: () => chain,
+      where: () => chain,
+      orderBy: () => Promise.resolve(rows),
+      then: (resolve: (v: any) => any, reject?: (e: any) => any) =>
+        Promise.resolve(rows).then(resolve, reject),
+    };
+    return chain;
+  }
 
   const mockDb = {
     select: () => ({
-      from: () => ({
-        where: (condition: any) => ({
-          orderBy: () => Promise.resolve(mockCollections),
-          then: (resolve: any) => resolve(mockCollections.slice(0, 1)),
-        }),
-        then: (resolve: any) => resolve(mockCollections),
-      }),
+      from: () => {
+        if (mockCollections.length === 0) {
+          return makeChain([mockSpace]);
+        }
+        return makeChain(mockCollections.length ? mockCollections : [mockSpace]);
+      },
     }),
-    insert: (table: any) => ({
+    insert: () => ({
       values: (data: any) => ({
         returning: () => {
           const newCol = {
@@ -33,14 +52,14 @@ vi.mock('../src/database/client.js', () => {
         },
       }),
     }),
-    update: (table: any) => ({
+    update: () => ({
       set: (data: any) => ({
         where: () => ({
           returning: () => Promise.resolve([{ ...mockCollections[0], ...data }]),
         }),
       }),
     }),
-    delete: (table: any) => ({
+    delete: () => ({
       where: () => Promise.resolve(),
     }),
   };

@@ -15,6 +15,7 @@ function SortableSpaceRow({
   menuSpaceId,
   editInputRef,
   menuRef,
+  canManage,
   onSelect,
   onStartRename,
   onDelete,
@@ -31,6 +32,7 @@ function SortableSpaceRow({
   menuSpaceId: string | null;
   editInputRef: React.RefObject<HTMLInputElement | null>;
   menuRef: React.RefObject<HTMLDivElement | null>;
+  canManage: boolean;
   onSelect: () => void;
   onStartRename: () => void;
   onDelete: () => void;
@@ -81,13 +83,15 @@ function SortableSpaceRow({
         </span>
         <span className="text-xs">{space.name}</span>
       </button>
-      <button
-        className="absolute right-2 flex size-5 items-center justify-center rounded text-[var(--muted)] opacity-0 transition-opacity hover:bg-[var(--surface)] hover:text-[var(--foreground)] group-hover:opacity-100"
-        onClick={(e) => { e.stopPropagation(); onToggleMenu(); }}
-      >
-        <MoreHorizontal className="size-3.5" />
-      </button>
-      {menuSpaceId === space.id && (
+      {canManage && (
+        <button
+          className="absolute right-2 flex size-5 items-center justify-center rounded text-[var(--muted)] opacity-0 transition-opacity hover:bg-[var(--surface)] hover:text-[var(--foreground)] group-hover:opacity-100"
+          onClick={(e) => { e.stopPropagation(); onToggleMenu(); }}
+        >
+          <MoreHorizontal className="size-3.5" />
+        </button>
+      )}
+      {canManage && menuSpaceId === space.id && (
         <div
           ref={menuRef}
           className="absolute right-2 top-6 z-50 min-w-[120px] rounded-md border border-[var(--border)] bg-[var(--surface)] py-1 shadow-xl"
@@ -145,6 +149,10 @@ interface SidebarProps {
   onLogout: () => void;
   theme: 'light' | 'dark';
   onToggleTheme: () => void;
+  /** Per-space: whether current user can rename/settings/delete */
+  canManageSpace?: (space: Space) => boolean;
+  /** Whether current user can create spaces in this org/personal */
+  canCreateSpace?: boolean;
 }
 
 export default function Sidebar({
@@ -173,6 +181,8 @@ export default function Sidebar({
   onLogout,
   theme,
   onToggleTheme,
+  canManageSpace = () => true,
+  canCreateSpace = true,
 }: SidebarProps) {
   const activeOrg = orgs.find((o) => o.id === activeOrgId);
   const activeSpace = spaces.find((s) => s.id === activeSpaceId);
@@ -356,13 +366,15 @@ export default function Sidebar({
       {/* Spaces label + add button */}
       <div className="flex h-8 items-center justify-between px-4">
         <span className="text-[11px] font-semibold text-[var(--muted)]">Spaces</span>
-        <button
-          onClick={onAddSpace}
-          className="flex size-5 items-center justify-center rounded text-[var(--muted)] hover:bg-[var(--surface)] hover:text-[var(--foreground)]"
-          title="Add space"
-        >
-          <Plus className="size-3" strokeWidth={2} />
-        </button>
+        {canCreateSpace && (
+          <button
+            onClick={onAddSpace}
+            className="flex size-5 items-center justify-center rounded text-[var(--muted)] hover:bg-[var(--surface)] hover:text-[var(--foreground)]"
+            title="Add space"
+          >
+            <Plus className="size-3" strokeWidth={2} />
+          </button>
+        )}
       </div>
 
       {/* Space list */}
@@ -379,6 +391,7 @@ export default function Sidebar({
                 menuSpaceId={menuSpaceId}
                 editInputRef={editInputRef}
                 menuRef={menuRef}
+                canManage={canManageSpace(space)}
                 onSelect={() => onSpaceSelect(space.id)}
                 onStartRename={() => startRename(space)}
                 onDelete={() => handleDelete(space.id)}

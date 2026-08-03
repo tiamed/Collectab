@@ -1,9 +1,9 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
-import { eq, and, asc } from 'drizzle-orm';
+import { eq, and, asc, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import { getDb } from '../../database/client.js';
-import { organizations, orgMembers, users } from '../../database/schema.js';
+import { organizations, orgMembers, users, spaces, spaceMembers } from '../../database/schema.js';
 import { authMiddleware, type AuthEnv } from '../middleware/auth.js';
 
 const createSchema = z.object({
@@ -20,6 +20,20 @@ const addMemberSchema = z.object({
   email: z.string().email(),
   role: z.enum(['admin', 'member']).default('member'),
 });
+
+type Db = ReturnType<typeof getDb>;
+
+async function getCallerOrgRole(
+  db: Db,
+  org: { id: string; ownerId: string },
+  userId: string,
+): Promise<'owner' | 'admin' | 'member' | null> {
+  if (org.ownerId === userId) return 'owner';
+  const [membership] = await db.select().from(orgMembers)
+    .where(and(eq(orgMembers.orgId, org.id), eq(orgMembers.userId, userId)));
+  if (!membership) return null;
+  return membership.role === 'admin' ? 'admin' : 'member';
+}
 
 export const orgRoutes = new Hono<AuthEnv>();
 orgRoutes.use('*', authMiddleware);
@@ -128,7 +142,7 @@ orgRoutes.get('/:id/members', async (c) => {
   return c.json({ owner, members });
 });
 
-// Add member to org
+// Add member to org (owner or admin; admin can only add role=member)
 orgRoutes.post('/:id/members', zValidator('json', addMemberSchema), async (c) => {
   const db = getDb();
   const userId = c.get('userId');
@@ -136,8 +150,16 @@ orgRoutes.post('/:id/members', zValidator('json', addMemberSchema), async (c) =>
   const { email, role } = c.req.valid('json');
 
   const [org] = await db.select().from(organizations).where(eq(organizations.id, id));
-  if (!org || org.ownerId !== userId) {
-    return c.json({ error: 'Only the org owner can add members' }, 403);
+  if (!org) return c.json({ error: 'Organization not found' }, 404);
+
+  const callerRole = await getCallerOrgRole(db, org, userId);
+  if (callerRole !== 'owner' && callerRole !== 'admin') {
+    return c.json({ error: 'Only the org owner or admin can add members' }, 403);
+  }
+
+  // Admin cannot create admins; only owner may set role 'admin'
+  if (callerRole === 'admin' && role !== 'member') {
+    return c.json({ error: 'Admins can only add members with role member' }, 403);
   }
 
   const [targetUser] = await db.select().from(users).where(eq(users.email, email));
@@ -145,18 +167,33 @@ orgRoutes.post('/:id/members', zValidator('json', addMemberSchema), async (c) =>
     return c.json({ error: 'User not found' }, 404);
   }
 
+  if (targetUser.id === org.ownerId) {
+    return c.json({ error: 'User is already the org owner' }, 400);
+  }
+
   if (targetUser.id === userId) {
     return c.json({ error: 'Cannot add yourself' }, 400);
   }
 
-  await db.insert(orgMembers)
-    .values({ orgId: id, userId: targetUser.id, role })
-    .onConflictDoUpdate({ target: [orgMembers.orgId, orgMembers.userId], set: { role } });
+  const [existingMember] = await db.select().from(orgMembers)
+    .where(and(eq(orgMembers.orgId, id), eq(orgMembers.userId, targetUser.id)));
+
+  // Changing an existing member's role is owner-only (covers remove+re-add role change path)
+  if (existingMember) {
+    if (callerRole !== 'owner') {
+      return c.json({ error: 'Only the org owner can change roles' }, 403);
+    }
+    await db.insert(orgMembers)
+      .values({ orgId: id, userId: targetUser.id, role })
+      .onConflictDoUpdate({ target: [orgMembers.orgId, orgMembers.userId], set: { role } });
+  } else {
+    await db.insert(orgMembers).values({ orgId: id, userId: targetUser.id, role });
+  }
 
   return c.json({ member: { userId: targetUser.id, email: targetUser.email, name: targetUser.name, role } }, 201);
 });
 
-// Remove member from org
+// Remove member from org (owner or admin with hierarchy guards); cascade space_members cleanup
 orgRoutes.delete('/:id/members/:memberId', async (c) => {
   const db = getDb();
   const userId = c.get('userId');
@@ -164,12 +201,49 @@ orgRoutes.delete('/:id/members/:memberId', async (c) => {
   const memberId = c.req.param('memberId');
 
   const [org] = await db.select().from(organizations).where(eq(organizations.id, id));
-  if (!org || org.ownerId !== userId) {
-    return c.json({ error: 'Only the org owner can remove members' }, 403);
+  if (!org) return c.json({ error: 'Organization not found' }, 404);
+
+  const callerRole = await getCallerOrgRole(db, org, userId);
+  if (callerRole !== 'owner' && callerRole !== 'admin') {
+    return c.json({ error: 'Only the org owner or admin can remove members' }, 403);
   }
 
-  await db.delete(orgMembers)
+  // Owner cannot be removed (prevents ownerless orgs)
+  if (memberId === org.ownerId) {
+    return c.json({ error: 'Cannot remove the org owner' }, 403);
+  }
+
+  const [target] = await db.select().from(orgMembers)
     .where(and(eq(orgMembers.orgId, id), eq(orgMembers.userId, memberId)));
+  if (!target) {
+    return c.json({ error: 'Member not found' }, 404);
+  }
+
+  // Admin can only remove targets with role 'member'
+  if (callerRole === 'admin') {
+    if (target.role !== 'member') {
+      return c.json({ error: 'Admins can only remove members' }, 403);
+    }
+  }
+
+  await db.transaction(async (tx) => {
+    await tx.delete(orgMembers)
+      .where(and(eq(orgMembers.orgId, id), eq(orgMembers.userId, memberId)));
+
+    // Cascade: remove their space_members rows across all spaces of this org
+    const orgSpaces = await tx
+      .select({ id: spaces.id })
+      .from(spaces)
+      .where(eq(spaces.orgId, id));
+
+    if (orgSpaces.length > 0) {
+      await tx.delete(spaceMembers)
+        .where(and(
+          inArray(spaceMembers.spaceId, orgSpaces.map((s) => s.id)),
+          eq(spaceMembers.userId, memberId),
+        ));
+    }
+  });
 
   return c.body(null, 204);
 });

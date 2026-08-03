@@ -1,10 +1,11 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
-import { eq, asc, and, or, isNull } from 'drizzle-orm';
+import { eq, asc, and, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import { getDb } from '../../database/client.js';
-import { spaces, spaceMembers, orgMembers } from '../../database/schema.js';
+import { spaces, spaceMembers, orgMembers, organizations } from '../../database/schema.js';
 import { authMiddleware, type AuthEnv } from '../middleware/auth.js';
+import { getEffectiveRole } from './permissions.js';
 
 const createSchema = z.object({
   name: z.string().min(1).max(255),
@@ -32,7 +33,6 @@ spaceRoutes.get('/', async (c) => {
       .where(and(eq(orgMembers.orgId, orgId), eq(orgMembers.userId, userId)));
 
     // Also check if user is the org owner
-    const { organizations } = await import('../../database/schema.js');
     const [org] = await db.select().from(organizations).where(eq(organizations.id, orgId));
     if (!org || (org.ownerId !== userId && !membership)) {
       return c.json({ error: 'No access to this organization' }, 403);
@@ -72,11 +72,13 @@ spaceRoutes.post('/', zValidator('json', createSchema), async (c) => {
   const userId = c.get('userId');
   const { name, icon, orgId } = c.req.valid('json');
 
+  let org: typeof organizations.$inferSelect | null = null;
+
   if (orgId) {
     // Verify user has access to org (owner or admin)
-    const { organizations } = await import('../../database/schema.js');
-    const [org] = await db.select().from(organizations).where(eq(organizations.id, orgId));
-    if (!org) return c.json({ error: 'Organization not found' }, 404);
+    const [found] = await db.select().from(organizations).where(eq(organizations.id, orgId));
+    if (!found) return c.json({ error: 'Organization not found' }, 404);
+    org = found;
 
     const [membership] = await db.select().from(orgMembers)
       .where(and(eq(orgMembers.orgId, orgId), eq(orgMembers.userId, userId)));
@@ -86,10 +88,46 @@ spaceRoutes.post('/', zValidator('json', createSchema), async (c) => {
     }
   }
 
-  const [space] = await db
-    .insert(spaces)
-    .values({ ownerId: userId, name, icon: icon || '💼', orgId: orgId || null })
-    .returning();
+  const space = await db.transaction(async (tx) => {
+    const [created] = await tx
+      .insert(spaces)
+      .values({ ownerId: userId, name, icon: icon || '💼', orgId: orgId || null })
+      .returning();
+
+    // Org spaces: auto-insert all org members with derived roles
+    if (orgId && org) {
+      const members = await tx
+        .select({ userId: orgMembers.userId, role: orgMembers.role })
+        .from(orgMembers)
+        .where(eq(orgMembers.orgId, orgId));
+
+      const memberRows: { spaceId: string; userId: string; role: string }[] = [];
+      const seen = new Set<string>();
+
+      // Space creator is always space owner
+      memberRows.push({ spaceId: created.id, userId, role: 'owner' });
+      seen.add(userId);
+
+      // Org owner → space owner (if different from creator)
+      if (org.ownerId !== userId) {
+        memberRows.push({ spaceId: created.id, userId: org.ownerId, role: 'owner' });
+        seen.add(org.ownerId);
+      }
+
+      for (const m of members) {
+        if (seen.has(m.userId)) continue;
+        const role = m.role === 'admin' ? 'editor' : 'viewer';
+        memberRows.push({ spaceId: created.id, userId: m.userId, role });
+        seen.add(m.userId);
+      }
+
+      if (memberRows.length > 0) {
+        await tx.insert(spaceMembers).values(memberRows);
+      }
+    }
+
+    return created;
+  });
 
   return c.json({ space }, 201);
 });
@@ -101,7 +139,7 @@ spaceRoutes.put('/:id', zValidator('json', updateSchema), async (c) => {
   const body = c.req.valid('json');
 
   const [existing] = await db.select().from(spaces).where(eq(spaces.id, id));
-  if (!existing || existing.ownerId !== userId) {
+  if (!existing || (await getEffectiveRole(db, existing, userId)) !== 'owner') {
     return c.json({ error: 'Space not found' }, 404);
   }
 
@@ -120,7 +158,7 @@ spaceRoutes.delete('/:id', async (c) => {
   const id = c.req.param('id');
 
   const [existing] = await db.select().from(spaces).where(eq(spaces.id, id));
-  if (!existing || existing.ownerId !== userId) {
+  if (!existing || (await getEffectiveRole(db, existing, userId)) !== 'owner') {
     return c.json({ error: 'Space not found' }, 404);
   }
 

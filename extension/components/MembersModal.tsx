@@ -17,9 +17,11 @@ interface MembersModalProps {
   spaceId: string | null;
   spaceName: string;
   onClose: () => void;
+  /** Org mode: only owners can change roles / assign admin */
+  canChangeRoles?: boolean;
 }
 
-export default function MembersModal({ orgId, orgName, spaceId, spaceName, onClose }: MembersModalProps) {
+export default function MembersModal({ orgId, orgName, spaceId, spaceName, onClose, canChangeRoles = true }: MembersModalProps) {
   const isOrgMode = !!orgId;
 
   const [owner, setOwner] = useState<{ id: string; email: string; name: string } | null>(null);
@@ -90,8 +92,11 @@ export default function MembersModal({ orgId, orgName, spaceId, spaceName, onClo
   };
 
   const title = isOrgMode ? `Members — ${orgName}` : `Members — ${spaceName}`;
+  // Org admins can only add members (not admins); owners see full role options
   const roleOptions = isOrgMode
-    ? [{ value: 'member', label: 'Member' }, { value: 'admin', label: 'Admin' }]
+    ? canChangeRoles
+      ? [{ value: 'member', label: 'Member' }, { value: 'admin', label: 'Admin' }]
+      : [{ value: 'member', label: 'Member' }]
     : [{ value: 'viewer', label: 'Viewer' }, { value: 'editor', label: 'Editor' }];
 
   return (
@@ -122,15 +127,17 @@ export default function MembersModal({ orgId, orgName, spaceId, spaceName, onClo
             onChange={(e) => setEmail(e.target.value)}
             className="flex-1 rounded border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-xs text-[var(--foreground)] outline-none placeholder:text-[var(--muted)] focus:ring-1 focus:ring-[var(--accent)]"
           />
-          <select
-            value={role}
-            onChange={(e) => setRole(e.target.value)}
-            className="rounded border border-[var(--border)] bg-[var(--background)] px-2 py-2 text-xs text-[var(--foreground)] outline-none"
-          >
-            {roleOptions.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
+          {(canChangeRoles || !isOrgMode) ? (
+            <select
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+              className="rounded border border-[var(--border)] bg-[var(--background)] px-2 py-2 text-xs text-[var(--foreground)] outline-none"
+            >
+              {roleOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          ) : null}
           <button
             type="submit"
             disabled={adding || !email.trim()}
@@ -177,15 +184,19 @@ export default function MembersModal({ orgId, orgName, spaceId, spaceName, onClo
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <select
-                  value={member.role}
-                  onChange={(e) => handleRoleChange(member.userId, e.target.value)}
-                  className="rounded border border-[var(--border)] bg-[var(--background)] px-1.5 py-0.5 text-[10px] text-[var(--muted)] outline-none"
-                >
-                  {roleOptions.map((opt) => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
+                {canChangeRoles ? (
+                  <select
+                    value={member.role}
+                    onChange={(e) => handleRoleChange(member.userId, e.target.value)}
+                    className="rounded border border-[var(--border)] bg-[var(--background)] px-1.5 py-0.5 text-[10px] text-[var(--muted)] outline-none"
+                  >
+                    {roleOptions.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="text-[10px] capitalize text-[var(--muted)]">{member.role}</span>
+                )}
                 <button
                   onClick={() => handleRemove(member.userId)}
                   className="text-[var(--muted)] hover:text-red-400"

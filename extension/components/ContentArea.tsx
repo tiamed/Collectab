@@ -24,6 +24,8 @@ interface ContentAreaProps {
   onTransferBookmark: (bookmarkId: string, fromCollectionId: string, targetCollectionId: string, newIndex: number) => Promise<void>;
   allCollapsed: boolean | null;
   onResetCollapsed: () => void;
+  /** When false, hide collection edit affordances (viewer) */
+  canEditContent?: boolean;
 }
 
 export default function ContentArea({
@@ -41,6 +43,7 @@ export default function ContentArea({
   onTransferBookmark,
   allCollapsed,
   onResetCollapsed,
+  canEditContent = true,
 }: ContentAreaProps) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -117,6 +120,7 @@ export default function ContentArea({
   };
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+  const activeSensors = canEditContent ? sensors : [];
 
   // Grid layout (flex-wrap) has gaps between rows/columns that pointerWithin
   // cannot hit — the pointer must be strictly inside a droppable rect, so over
@@ -384,7 +388,7 @@ export default function ContentArea({
 
   return (
     <DndContext
-      sensors={sensors}
+      sensors={activeSensors}
       collisionDetection={collisionDetection}
       measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
       onDragStart={handleDragStart}
@@ -432,22 +436,26 @@ export default function ContentArea({
 
               <span className="text-[10px] text-[var(--muted)]">{bookmarks.length}</span>
 
-              <button
-                onClick={() => setAddingToCollection(collection.id)}
-                className="flex size-5 items-center justify-center rounded text-[var(--muted)] opacity-0 transition-opacity hover:bg-[var(--surface)] hover:text-[var(--foreground)] group-hover/section:opacity-100"
-                title="Add bookmark"
-              >
-                <Plus className="size-3" strokeWidth={2} />
-              </button>
+              {canEditContent && (
+                <button
+                  onClick={() => setAddingToCollection(collection.id)}
+                  className="flex size-5 items-center justify-center rounded text-[var(--muted)] opacity-0 transition-opacity hover:bg-[var(--surface)] hover:text-[var(--foreground)] group-hover/section:opacity-100"
+                  title="Add bookmark"
+                >
+                  <Plus className="size-3" strokeWidth={2} />
+                </button>
+              )}
 
-              <button
-                className="flex size-5 items-center justify-center rounded text-[var(--muted)] opacity-0 transition-opacity hover:bg-[var(--surface)] hover:text-[var(--foreground)] group-hover/section:opacity-100"
-                onClick={() => setMenuColId(menuColId === collection.id ? null : collection.id)}
-              >
-                <MoreHorizontal className="size-3.5" />
-              </button>
+              {canEditContent && (
+                <button
+                  className="flex size-5 items-center justify-center rounded text-[var(--muted)] opacity-0 transition-opacity hover:bg-[var(--surface)] hover:text-[var(--foreground)] group-hover/section:opacity-100"
+                  onClick={() => setMenuColId(menuColId === collection.id ? null : collection.id)}
+                >
+                  <MoreHorizontal className="size-3.5" />
+                </button>
+              )}
 
-              {menuColId === collection.id && (
+              {canEditContent && menuColId === collection.id && (
                 <div
                   ref={menuRef}
                   className="absolute left-20 top-6 z-50 min-w-[120px] rounded-md border border-[var(--border)] bg-[var(--surface)] py-1 shadow-xl"
@@ -491,9 +499,10 @@ export default function ContentArea({
               <DraggableBookmarkList
                 collectionId={collection.id}
                 bookmarks={bookmarks}
-                onEdit={(b) => setEditingBookmark(b)}
-                onDelete={(id) => onDeleteBookmark(id)}
-                onAddClick={() => setAddingToCollection(collection.id)}
+                onEdit={canEditContent ? (b) => setEditingBookmark(b) : () => {}}
+                onDelete={canEditContent ? (id) => onDeleteBookmark(id) : async () => {}}
+                onAddClick={canEditContent ? () => setAddingToCollection(collection.id) : () => {}}
+                readOnly={!canEditContent}
               />
             )}
           </section>

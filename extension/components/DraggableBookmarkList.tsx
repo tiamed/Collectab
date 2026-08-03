@@ -11,16 +11,19 @@ interface DraggableBookmarkListProps {
   onEdit: (bookmark: Bookmark) => void;
   onDelete: (id: string) => void;
   onAddClick: () => void;
+  readOnly?: boolean;
 }
 
 function SortableBookmarkCard({
   bookmark,
   onEdit,
   onDelete,
+  readOnly,
 }: {
   bookmark: Bookmark;
   onEdit: () => void;
   onDelete: () => void;
+  readOnly?: boolean;
 }) {
   // Track which src failed so a new favicon URL after sync/edit retries <img>
   const [failedFavicon, setFailedFavicon] = useState<string | null>(null);
@@ -28,6 +31,7 @@ function SortableBookmarkCard({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: bookmark.id,
     data: { type: 'bookmark', collectionId: bookmark.collectionId },
+    disabled: readOnly,
   });
 
   const style = {
@@ -55,20 +59,22 @@ function SortableBookmarkCard({
       {...attributes}
       {...listeners}
     >
-      <div className="absolute top-1.5 right-1.5 flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-        <button
-          className="flex size-5 items-center justify-center rounded bg-[var(--background)]/80 text-[var(--muted)] hover:text-[var(--foreground)]"
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onEdit(); }}
-        >
-          <Pencil className="size-3" />
-        </button>
-        <button
-          className="flex size-5 items-center justify-center rounded bg-[var(--background)]/80 text-[var(--muted)] hover:text-red-400"
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDelete(); }}
-        >
-          <Trash2 className="size-3" />
-        </button>
-      </div>
+      {!readOnly && (
+        <div className="absolute top-1.5 right-1.5 flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+          <button
+            className="flex size-5 items-center justify-center rounded bg-[var(--background)]/80 text-[var(--muted)] hover:text-[var(--foreground)]"
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onEdit(); }}
+          >
+            <Pencil className="size-3" />
+          </button>
+          <button
+            className="flex size-5 items-center justify-center rounded bg-[var(--background)]/80 text-[var(--muted)] hover:text-red-400"
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDelete(); }}
+          >
+            <Trash2 className="size-3" />
+          </button>
+        </div>
+      )}
       <div className="flex items-center gap-2">
         {showFavicon ? (
           <img
@@ -102,10 +108,12 @@ export default function DraggableBookmarkList({
   onEdit,
   onDelete,
   onAddClick,
+  readOnly = false,
 }: DraggableBookmarkListProps) {
   const { setNodeRef } = useDroppable({
     id: `collection-${collectionId}`,
     data: { type: 'collection', collectionId },
+    disabled: readOnly,
   });
 
   return (
@@ -121,10 +129,11 @@ export default function DraggableBookmarkList({
             bookmark={bookmark}
             onEdit={() => onEdit(bookmark)}
             onDelete={() => onDelete(bookmark.id)}
+            readOnly={readOnly}
           />
         ))}
       </SortableContext>
-      {bookmarks.length === 0 && (
+      {!readOnly && bookmarks.length === 0 && (
         <button
           onClick={onAddClick}
           className="flex w-[168px] items-center justify-center gap-1.5 rounded-md border border-dashed border-[var(--border)] p-4 text-xs text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)]"

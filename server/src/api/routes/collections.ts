@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { getDb } from '../../database/client.js';
 import { collections, spaces, organizations, orgMembers } from '../../database/schema.js';
 import { authMiddleware, type AuthEnv } from '../middleware/auth.js';
+import { canEditSpace } from './permissions.js';
 
 const createSchema = z.object({
   spaceId: z.string().uuid(),
@@ -70,6 +71,11 @@ collectionRoutes.post('/', zValidator('json', createSchema), async (c) => {
   const userId = c.get('userId');
   const { spaceId, name, icon, color } = c.req.valid('json');
 
+  const [space] = await db.select().from(spaces).where(eq(spaces.id, spaceId));
+  if (!space || !(await canEditSpace(db, space, userId))) {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
+
   const [collection] = await db
     .insert(collections)
     .values({
@@ -91,8 +97,20 @@ collectionRoutes.put('/:id', zValidator('json', updateSchema), async (c) => {
   const body = c.req.valid('json');
 
   const [existing] = await db.select().from(collections).where(eq(collections.id, id));
-  if (!existing || existing.ownerId !== userId) {
+  if (!existing) {
     return c.json({ error: 'Collection not found' }, 404);
+  }
+
+  const [space] = await db.select().from(spaces).where(eq(spaces.id, existing.spaceId));
+  if (!space || !(await canEditSpace(db, space, userId))) {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
+
+  if (body.spaceId && body.spaceId !== existing.spaceId) {
+    const [targetSpace] = await db.select().from(spaces).where(eq(spaces.id, body.spaceId));
+    if (!targetSpace || !(await canEditSpace(db, targetSpace, userId))) {
+      return c.json({ error: 'Forbidden' }, 403);
+    }
   }
 
   const updates: Record<string, unknown> = { updatedAt: new Date() };
@@ -112,8 +130,13 @@ collectionRoutes.delete('/:id', async (c) => {
   const id = c.req.param('id');
 
   const [existing] = await db.select().from(collections).where(eq(collections.id, id));
-  if (!existing || existing.ownerId !== userId) {
+  if (!existing) {
     return c.json({ error: 'Collection not found' }, 404);
+  }
+
+  const [space] = await db.select().from(spaces).where(eq(spaces.id, existing.spaceId));
+  if (!space || !(await canEditSpace(db, space, userId))) {
+    return c.json({ error: 'Forbidden' }, 403);
   }
 
   await db.delete(collections).where(eq(collections.id, id));

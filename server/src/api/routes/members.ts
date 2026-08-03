@@ -3,8 +3,9 @@ import { zValidator } from '@hono/zod-validator';
 import { eq, and } from 'drizzle-orm';
 import { z } from 'zod';
 import { getDb } from '../../database/client.js';
-import { spaces, spaceMembers, users } from '../../database/schema.js';
+import { spaces, spaceMembers, users, orgMembers, organizations } from '../../database/schema.js';
 import { authMiddleware, type AuthEnv } from '../middleware/auth.js';
+import { getEffectiveRole } from './permissions.js';
 
 const addMemberSchema = z.object({
   email: z.string().email(),
@@ -63,7 +64,7 @@ memberRoutes.post('/:spaceId', zValidator('json', addMemberSchema), async (c) =>
   const { email, role } = c.req.valid('json');
 
   const [space] = await db.select().from(spaces).where(eq(spaces.id, spaceId));
-  if (!space || space.ownerId !== userId) {
+  if (!space || (await getEffectiveRole(db, space, userId)) !== 'owner') {
     return c.json({ error: 'Only the owner can add members' }, 403);
   }
 
@@ -74,6 +75,19 @@ memberRoutes.post('/:spaceId', zValidator('json', addMemberSchema), async (c) =>
 
   if (targetUser.id === userId) {
     return c.json({ error: 'Cannot add yourself as a member' }, 400);
+  }
+
+  // Org spaces: target must already be an org member
+  if (space.orgId) {
+    const [orgMembership] = await db.select().from(orgMembers)
+      .where(and(eq(orgMembers.orgId, space.orgId), eq(orgMembers.userId, targetUser.id)));
+
+    const [org] = await db.select().from(organizations).where(eq(organizations.id, space.orgId));
+    const isOrgOwner = org?.ownerId === targetUser.id;
+
+    if (!orgMembership && !isOrgOwner) {
+      return c.json({ error: 'User must be an org member first' }, 403);
+    }
   }
 
   const [existing] = await db.select().from(spaceMembers)
@@ -102,7 +116,7 @@ memberRoutes.put('/:spaceId/:memberId', zValidator('json', updateMemberSchema), 
   const { role } = c.req.valid('json');
 
   const [space] = await db.select().from(spaces).where(eq(spaces.id, spaceId));
-  if (!space || space.ownerId !== userId) {
+  if (!space || (await getEffectiveRole(db, space, userId)) !== 'owner') {
     return c.json({ error: 'Only the owner can change roles' }, 403);
   }
 
@@ -121,8 +135,9 @@ memberRoutes.delete('/:spaceId/:memberId', async (c) => {
   const memberId = c.req.param('memberId');
 
   const [space] = await db.select().from(spaces).where(eq(spaces.id, spaceId));
+  const isOwner = space ? (await getEffectiveRole(db, space, userId)) === 'owner' : false;
   // Owner can remove anyone; members can remove themselves
-  if (!space || (space.ownerId !== userId && memberId !== userId)) {
+  if (!space || (!isOwner && memberId !== userId)) {
     return c.json({ error: 'Not authorized' }, 403);
   }
 
