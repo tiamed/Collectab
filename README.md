@@ -45,6 +45,8 @@ This starts **PostgreSQL** and the API server. The server applies SQL migrations
 API: `http://localhost:3001/api`  
 Postgres (host): `localhost:5432` — database `collectab`, user/password `postgres` / `postgres` (override with `POSTGRES_PASSWORD`).
 
+> **Port conflict?** If port 5432 on the host is already taken (e.g. another PostgreSQL instance), edit `docker-compose.yml` and change the Postgres `ports` mapping to a free host port, e.g. `15433:5432`. The server connects to Postgres over the internal Docker network (`postgres:5432`), so its `DATABASE_URL` stays unchanged — only host-side access to the database moves to `localhost:15433`.
+
 > Existing installs using the old database name `toby_bookmark` can keep their `DATABASE_URL` as-is, or rename the DB (`ALTER DATABASE toby_bookmark RENAME TO collectab`) and update the connection string.
 
 > `docker compose up` pulls `ghcr.io/tiamed/collectab/server:latest`. To build locally: `docker compose up --build`.
@@ -66,6 +68,8 @@ docker run -d --name collectab-pg \
   -v collectab-pgdata:/var/lib/postgresql/data \
   postgres:17-alpine
 ```
+
+> If port 5432 is taken on the host, change `-p 5432:5432` to a free port (e.g. `-p 15433:5432`) and use that port in the server's `DATABASE_URL` below (e.g. `host.docker.internal:15433`).
 
 Wait until ready:
 
@@ -117,6 +121,8 @@ Copy `server/.env.example` to `server/.env` and customize:
 | `DATABASE_URL` | PostgreSQL connection string | `postgresql://postgres:postgres@localhost:5432/collectab` |
 | `JWT_SECRET` | Secret for signing access tokens (min 32 chars) | — |
 | `JWT_REFRESH_SECRET` | Secret for signing refresh tokens | — |
+| `JWT_ACCESS_EXPIRY_SECONDS` | Access token lifetime | `900` |
+| `JWT_REFRESH_EXPIRY_SECONDS` | Refresh token lifetime | `604800` |
 | `PORT` | Server port | `3001` |
 | `CORS_ORIGIN` | Allowed CORS origins | `*` |
 
