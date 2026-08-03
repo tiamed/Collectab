@@ -45,7 +45,7 @@ export default function TopBar({
           <button
             onClick={onManageMembers}
             className="flex size-7 items-center justify-center rounded text-[var(--muted)] hover:bg-[var(--surface)]"
-            title="Manage members"
+            title="Manage space members"
           >
             <UserPlus className="size-4" strokeWidth={1.5} />
           </button>

@@ -12,16 +12,19 @@ import {
 import type { OrgMember, SpaceMember } from '@/lib/api';
 
 interface MembersModalProps {
+  /** When set, manage org members; otherwise manage space members via spaceId */
   orgId?: string | null;
   orgName?: string;
   spaceId: string | null;
   spaceName: string;
   onClose: () => void;
-  /** Org mode: only owners can change roles / assign admin */
+  /** Org mode: only owners can change roles / assign admin. Space mode: always true for space owners. */
   canChangeRoles?: boolean;
+  /** Space is inside an org — show invite hint about org membership */
+  isOrgSpace?: boolean;
 }
 
-export default function MembersModal({ orgId, orgName, spaceId, spaceName, onClose, canChangeRoles = true }: MembersModalProps) {
+export default function MembersModal({ orgId, orgName, spaceId, spaceName, onClose, canChangeRoles = true, isOrgSpace = false }: MembersModalProps) {
   const isOrgMode = !!orgId;
 
   const [owner, setOwner] = useState<{ id: string; email: string; name: string } | null>(null);
@@ -41,7 +44,8 @@ export default function MembersModal({ orgId, orgName, spaceId, spaceName, onClo
       } else if (spaceId) {
         const data = await getSpaceMembers(spaceId);
         setOwner(data.owner);
-        setMembers(data.members);
+        // Hide the space owner row (shown separately) and any 'owner' role entries
+        setMembers(data.members.filter((m) => m.userId !== data.owner?.id && m.role !== 'owner'));
       }
     } catch {
       // ignore
@@ -92,7 +96,6 @@ export default function MembersModal({ orgId, orgName, spaceId, spaceName, onClo
   };
 
   const title = isOrgMode ? `Members — ${orgName}` : `Members — ${spaceName}`;
-  // Org admins can only add members (not admins); owners see full role options
   const roleOptions = isOrgMode
     ? canChangeRoles
       ? [{ value: 'member', label: 'Member' }, { value: 'admin', label: 'Admin' }]
@@ -112,11 +115,15 @@ export default function MembersModal({ orgId, orgName, spaceId, spaceName, onClo
           </button>
         </div>
 
-        {isOrgMode && (
+        {isOrgMode ? (
           <p className="mb-3 text-[10px] text-[var(--muted)]">
-            Org members have access to all spaces and collections within this organization.
+            Org members can be granted access to spaces. New org members are not added to existing spaces automatically.
           </p>
-        )}
+        ) : isOrgSpace ? (
+          <p className="mb-3 text-[10px] text-[var(--muted)]">
+            Invite people who are already org members. Editor can edit content; viewer is read-only.
+          </p>
+        ) : null}
 
         {/* Add member form */}
         <form onSubmit={handleAdd} className="mb-4 flex gap-2">

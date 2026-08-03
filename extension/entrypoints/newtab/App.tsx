@@ -56,7 +56,11 @@ export default function App() {
   const [allCollapsed, setAllCollapsed] = useState<boolean | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
-  const [showMembers, setShowMembers] = useState(false);
+  const [membersModal, setMembersModal] = useState<
+    | { type: 'space' }
+    | { type: 'org'; orgId: string; orgName: string }
+    | null
+  >(null);
   const [showSortCollections, setShowSortCollections] = useState(false);
   const [orgSettingsTarget, setOrgSettingsTarget] = useState<Organization | null>(null);
   const [spaceSettingsTarget, setSpaceSettingsTarget] = useState<Space | null>(null);
@@ -221,9 +225,8 @@ export default function App() {
     activeSpace.ownerId === sessionUser?.id || activeOrg?.role === 'owner'
   );
   const canEditContent = isSpaceOwner || activeOrg?.role === 'admin';
-  const canManageMembers = activeOrgId
-    ? (activeOrg?.role === 'owner' || activeOrg?.role === 'admin')
-    : isSpaceOwner;
+  // TopBar manages space members — space owners only (org or personal)
+  const canManageSpaceMembers = isSpaceOwner;
   const canManageSpace = isSpaceOwner;
   const canChangeOrgRoles = activeOrg?.role === 'owner';
   const canCreateSpace = !activeOrgId || activeOrg?.role === 'owner' || activeOrg?.role === 'admin';
@@ -580,6 +583,7 @@ export default function App() {
         onRenamePersonal={handleRenamePersonal}
         onDeleteOrg={(id, name) => setDeleteOrgTarget({ id, name })}
         onOpenOrgSettings={setOrgSettingsTarget}
+        onManageOrgMembers={(org) => setMembersModal({ type: 'org', orgId: org.id, orgName: org.name })}
         spaces={spaces}
         activeSpaceId={activeSpaceId}
         onSpaceSelect={setActiveSpaceId}
@@ -610,9 +614,9 @@ export default function App() {
             if (space) setSpaceSettingsTarget(space);
             else setShowSettings(true);
           }}
-          onManageMembers={() => setShowMembers(true)}
+          onManageMembers={() => setMembersModal({ type: 'space' })}
           canEditContent={canEditContent}
-          canManageMembers={canManageMembers}
+          canManageMembers={canManageSpaceMembers}
           canManageSpace={canManageSpace}
         />
         <Toolbar
@@ -654,14 +658,23 @@ export default function App() {
       {showAuth && (
         <AuthModal onClose={() => setShowAuth(false)} onLogin={login} onRegister={register} />
       )}
-      {showMembers && (
+      {membersModal?.type === 'space' && (
         <MembersModal
-          orgId={activeOrgId}
-          orgName={orgs.find((o) => o.id === activeOrgId)?.name}
           spaceId={activeSpaceId}
           spaceName={activeSpace?.name ?? ''}
-          onClose={() => setShowMembers(false)}
-          canChangeRoles={activeOrgId ? canChangeOrgRoles : true}
+          isOrgSpace={!!activeOrgId}
+          onClose={() => setMembersModal(null)}
+          canChangeRoles
+        />
+      )}
+      {membersModal?.type === 'org' && (
+        <MembersModal
+          orgId={membersModal.orgId}
+          orgName={membersModal.orgName}
+          spaceId={null}
+          spaceName=""
+          onClose={() => setMembersModal(null)}
+          canChangeRoles={canChangeOrgRoles}
         />
       )}
 

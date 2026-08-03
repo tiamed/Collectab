@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Search, Layers, Settings, LogOut, Plus, Pencil, Trash2, MoreHorizontal, ChevronDown } from 'lucide-react';
+import { Search, Layers, Settings, LogOut, Plus, Pencil, Trash2, MoreHorizontal, ChevronDown, UserPlus } from 'lucide-react';
 import ThemeToggle from './ThemeToggle';
 import IconDisplay from './IconDisplay';
 import type { Space, User, Organization } from '@/lib/api';
@@ -133,6 +133,7 @@ interface SidebarProps {
   onRenamePersonal: () => void;
   onDeleteOrg: (id: string, name: string) => void;
   onOpenOrgSettings: (org: Organization) => void;
+  onManageOrgMembers?: (org: Organization) => void;
   spaces: Space[];
   activeSpaceId: string | null;
   onSpaceSelect: (id: string) => void;
@@ -164,6 +165,7 @@ export default function Sidebar({
   onRenamePersonal,
   onDeleteOrg,
   onOpenOrgSettings,
+  onManageOrgMembers,
   personalName,
   spaces,
   activeSpaceId,
@@ -307,29 +309,42 @@ export default function Sidebar({
                   <span className="flex-1 truncate">{org.name}</span>
                   <span className="text-[9px] text-[var(--muted)]">{org.role}</span>
                 </button>
-                {org.role === 'owner' && (
+                {(org.role === 'owner' || org.role === 'admin') && (
                   <div className="flex shrink-0 items-center gap-0.5 pr-2 opacity-0 group-hover/org:opacity-100">
-                    <button
-                      className="flex size-5 items-center justify-center rounded text-[var(--muted)] hover:text-[var(--foreground)]"
-                      onClick={(e) => { e.stopPropagation(); setShowOrgDropdown(false); onOpenOrgSettings(org); }}
-                      title="Settings"
-                    >
-                      <Settings className="size-2.5" />
-                    </button>
-                    <button
-                      className="flex size-5 items-center justify-center rounded text-[var(--muted)] hover:text-[var(--foreground)]"
-                      onClick={(e) => { e.stopPropagation(); setShowOrgDropdown(false); onRenameOrg(org.id, org.name); }}
-                      title="Rename"
-                    >
-                      <Pencil className="size-2.5" />
-                    </button>
-                    <button
-                      className="flex size-5 items-center justify-center rounded text-[var(--muted)] hover:text-red-400"
-                      onClick={(e) => { e.stopPropagation(); setShowOrgDropdown(false); onDeleteOrg(org.id, org.name); }}
-                      title="Delete"
-                    >
-                      <Trash2 className="size-2.5" />
-                    </button>
+                    {onManageOrgMembers && (
+                      <button
+                        className="flex size-5 items-center justify-center rounded text-[var(--muted)] hover:text-[var(--foreground)]"
+                        onClick={(e) => { e.stopPropagation(); setShowOrgDropdown(false); onManageOrgMembers(org); }}
+                        title="Manage members"
+                      >
+                        <UserPlus className="size-2.5" />
+                      </button>
+                    )}
+                    {org.role === 'owner' && (
+                      <>
+                        <button
+                          className="flex size-5 items-center justify-center rounded text-[var(--muted)] hover:text-[var(--foreground)]"
+                          onClick={(e) => { e.stopPropagation(); setShowOrgDropdown(false); onOpenOrgSettings(org); }}
+                          title="Settings"
+                        >
+                          <Settings className="size-2.5" />
+                        </button>
+                        <button
+                          className="flex size-5 items-center justify-center rounded text-[var(--muted)] hover:text-[var(--foreground)]"
+                          onClick={(e) => { e.stopPropagation(); setShowOrgDropdown(false); onRenameOrg(org.id, org.name); }}
+                          title="Rename"
+                        >
+                          <Pencil className="size-2.5" />
+                        </button>
+                        <button
+                          className="flex size-5 items-center justify-center rounded text-[var(--muted)] hover:text-red-400"
+                          onClick={(e) => { e.stopPropagation(); setShowOrgDropdown(false); onDeleteOrg(org.id, org.name); }}
+                          title="Delete"
+                        >
+                          <Trash2 className="size-2.5" />
+                        </button>
+                      </>
+                    )}
                   </div>
                 )}
               </div>

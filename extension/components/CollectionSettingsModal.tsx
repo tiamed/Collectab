@@ -2,18 +2,16 @@ import { useState } from 'react';
 import { X } from 'lucide-react';
 import type { Collection } from '@/lib/api';
 import EmojiIconPicker from './EmojiIconPicker';
-import ColorPicker from './ColorPicker';
 
 interface CollectionSettingsModalProps {
   collection: Collection;
-  onSave: (updates: { name?: string; icon?: string; color?: string }) => Promise<void>;
+  onSave: (updates: { name?: string; icon?: string }) => Promise<void>;
   onClose: () => void;
 }
 
 export default function CollectionSettingsModal({ collection, onSave, onClose }: CollectionSettingsModalProps) {
   const [name, setName] = useState(collection.name);
   const [icon, setIcon] = useState(collection.icon);
-  const [color, setColor] = useState(collection.color);
   const [saving, setSaving] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -23,7 +21,6 @@ export default function CollectionSettingsModal({ collection, onSave, onClose }:
       await onSave({
         name: name.trim() !== collection.name ? name.trim() : undefined,
         icon: icon !== collection.icon ? icon : undefined,
-        color: color !== collection.color ? color : undefined,
       });
       onClose();
     } finally {
@@ -56,7 +53,6 @@ export default function CollectionSettingsModal({ collection, onSave, onClose }:
             />
           </div>
           <EmojiIconPicker value={icon} onChange={setIcon} />
-          <ColorPicker value={color} onChange={setColor} />
         </div>
 
         <div className="mt-5 flex justify-end gap-2">

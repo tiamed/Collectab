@@ -26,11 +26,21 @@ memberRoutes.get('/:spaceId', async (c) => {
   const spaceId = c.req.param('spaceId');
 
   const [space] = await db.select().from(spaces).where(eq(spaces.id, spaceId));
-  if (!space || space.ownerId !== userId) {
-    // Also allow members to see the member list
-    const [membership] = await db.select().from(spaceMembers)
-      .where(and(eq(spaceMembers.spaceId, spaceId), eq(spaceMembers.userId, userId)));
-    if (!membership) {
+  if (!space) {
+    return c.json({ error: 'Space not found' }, 404);
+  }
+
+  const role = await getEffectiveRole(db, space, userId);
+  if (!role) {
+    // Fall back: org members can still see the member list (read inheritance)
+    if (space.orgId) {
+      const [org] = await db.select().from(organizations).where(eq(organizations.id, space.orgId));
+      const [membership] = await db.select().from(orgMembers)
+        .where(and(eq(orgMembers.orgId, space.orgId), eq(orgMembers.userId, userId)));
+      if (!org || (org.ownerId !== userId && !membership)) {
+        return c.json({ error: 'Space not found' }, 404);
+      }
+    } else {
       return c.json({ error: 'Space not found' }, 404);
     }
   }
@@ -51,7 +61,7 @@ memberRoutes.get('/:spaceId', async (c) => {
   const [owner] = await db
     .select({ id: users.id, email: users.email, name: users.name })
     .from(users)
-    .where(eq(users.id, space?.ownerId ?? ''));
+    .where(eq(users.id, space.ownerId));
 
   return c.json({ owner, members });
 });
