@@ -1,6 +1,6 @@
 # Collectab
 
-<img width="2289" height="1257" alt="newtab preview" src="https://github.com/user-attachments/assets/5fe2673d-baf7-477a-9786-92ea6c20cbd2" />
+<img width="2288" height="1260" alt="newtab preview" src="https://github.com/user-attachments/assets/1f83a103-fba6-45d4-8147-8f4a3a511535" />
 
 
 A Toby-like browser extension bookmark manager with organizations, spaces, collections, drag-drop reorder, and CRDT-based real-time sync.
