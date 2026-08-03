@@ -8,13 +8,13 @@ import { authMiddleware, type AuthEnv } from '../middleware/auth.js';
 
 const createSchema = z.object({
   name: z.string().min(1).max(255),
-  icon: z.string().max(50).optional(),
+  icon: z.string().max(2048).optional(),
   orgId: z.string().uuid().optional(),
 });
 
 const updateSchema = z.object({
   name: z.string().min(1).max(255).optional(),
-  icon: z.string().max(50).optional(),
+  icon: z.string().max(2048).optional(),
   orderIndex: z.number().int().min(0).optional(),
 });
 

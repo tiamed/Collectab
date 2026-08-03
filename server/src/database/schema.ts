@@ -13,7 +13,7 @@ export const users = pgTable('users', {
 export const organizations = pgTable('organizations', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: varchar('name', { length: 255 }).notNull(),
-  icon: varchar('icon', { length: 50 }).default('🏢'),
+  icon: text('icon').default('🏢'),
   ownerId: uuid('owner_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
@@ -32,7 +32,7 @@ export const spaces = pgTable('spaces', {
   orgId: uuid('org_id').references(() => organizations.id, { onDelete: 'cascade' }),
   ownerId: uuid('owner_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
   name: varchar('name', { length: 255 }).notNull(),
-  icon: varchar('icon', { length: 50 }).default('💼'),
+  icon: text('icon').default('💼'),
   orderIndex: integer('order_index').default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
@@ -51,7 +51,7 @@ export const collections = pgTable('collections', {
   spaceId: uuid('space_id').references(() => spaces.id, { onDelete: 'cascade' }).notNull(),
   ownerId: uuid('owner_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
   name: varchar('name', { length: 255 }).notNull(),
-  icon: varchar('icon', { length: 50 }).default('📁'),
+  icon: text('icon').default('📁'),
   color: varchar('color', { length: 7 }).default('#9761da'),
   orderIndex: integer('order_index').default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
