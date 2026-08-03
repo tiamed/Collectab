@@ -354,19 +354,56 @@ export default function App() {
     newIndex: number,
   ) => {
     const mgr = crdtOrderRef.current;
+    const allBookmarks = Object.values(bookmarksRef.current).flat();
+    const byId = new Map(allBookmarks.map((b) => [b.id, b]));
+
     if (mgr?.isReady) {
-      const srcIds = mgr.getOrderedIds(fromCollectionId);
-      const from = srcIds.indexOf(bookmarkId);
-      if (from !== -1) {
-        mgr.moveAcross(bookmarkId, fromCollectionId, from, targetCollectionId, newIndex);
+      try {
+        const srcIds = mgr.getOrderedIds(fromCollectionId);
+        const from = srcIds.indexOf(bookmarkId);
+        if (from !== -1) {
+          mgr.moveAcross(bookmarkId, fromCollectionId, from, targetCollectionId, newIndex);
+        }
+      } catch {
+        // CRDT move failed (e.g. Loro insert bounds) — fall through so the
+        // REST ownership update below still persists the transfer.
       }
     }
+
     try {
-      await update(bookmarkId, { collectionId: targetCollectionId, orderIndex: newIndex });
+      // Persist collectionId ownership via REST so DB lookups keep X in the target.
+      await update(bookmarkId, { collectionId: targetCollectionId });
     } catch {
       // noop - DnD state already reflects the change
     }
-  }, [update]);
+
+    try {
+      // Renumber the whole target collection so orderIndex has no duplicates
+      // (same guarantee the in-collection /reorder path gives on refresh).
+      let ordered: Bookmark[] | null = null;
+      if (mgr?.isReady) {
+        const ids = mgr.getOrderedIds(targetCollectionId);
+        if (ids.length > 0) {
+          ordered = ids
+            .map((id) => byId.get(id))
+            .filter((b): b is Bookmark => Boolean(b));
+        }
+      } else {
+        const targetList = bookmarksRef.current[targetCollectionId] || [];
+        const moved = byId.get(bookmarkId);
+        if (moved) {
+          const withoutMoved = targetList.filter((b) => b.id !== bookmarkId);
+          const idx = Math.max(0, Math.min(newIndex, withoutMoved.length));
+          ordered = [...withoutMoved.slice(0, idx), moved, ...withoutMoved.slice(idx)];
+        }
+      }
+      if (ordered && ordered.length > 0) {
+        await reorder(targetCollectionId, ordered);
+      }
+    } catch {
+      // noop - CRDT is the ordering authority; REST persistence is best-effort
+    }
+  }, [update, reorder]);
 
   const handleUpdateBookmark = useCallback(async (
     id: string,

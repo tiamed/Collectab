@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { DndContext, PointerSensor, useSensor, useSensors, DragOverlay, type DragEndEvent, type DragStartEvent } from '@dnd-kit/core';
+import { DndContext, PointerSensor, useSensor, useSensors, DragOverlay, closestCorners, closestCenter, MeasuringStrategy, type CollisionDetection, type DragEndEvent, type DragOverEvent, type DragStartEvent } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
 import { ChevronDown, ChevronRight, Plus, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import BookmarkCard from './BookmarkCard';
@@ -19,7 +19,7 @@ interface ContentAreaProps {
   onRenameCollection: (id: string, name: string) => void;
   onDeleteCollection: (id: string) => void;
   onCollectionReorder: (collectionId: string, orderedBookmarks: Bookmark[], meta: { bookmarkId: string; fromIndex: number; toIndex: number }) => void;
-  onTransferBookmark: (bookmarkId: string, fromCollectionId: string, targetCollectionId: string, newIndex: number) => void;
+  onTransferBookmark: (bookmarkId: string, fromCollectionId: string, targetCollectionId: string, newIndex: number) => Promise<void>;
   allCollapsed: boolean | null;
   onResetCollapsed: () => void;
 }
@@ -41,6 +41,29 @@ export default function ContentArea({
 }: ContentAreaProps) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [activeId, setActiveId] = useState<string | null>(null);
+  // Live mirror of bookmarksByCollection, mutated during drag so cross-collection
+  // moves animate in real time (target SortableContext re-computes positions).
+  const [dragItems, setDragItems] = useState<Record<string, Bookmark[]> | null>(null);
+  const dragItemsRef = useRef<Record<string, Bookmark[]> | null>(null);
+  const collectionsRef = useRef(collections);
+  // The mirror itself is the single source of truth for X's position during a
+  // drag (mirror lists are X-inclusive). dragOver mutates it; dragEnd reads it
+  // back. Do NOT read active.data.current.collectionId — the mirror re-render
+  // mutates X's sortable data, which would feed back into the drag handler and
+  // cause an infinite over-change loop (React #185).
+  const lastOverIdRef = useRef<string | null>(null);
+  const recentlyMovedToNewContainer = useRef(false);
+  dragItemsRef.current = dragItems;
+  collectionsRef.current = collections;
+  const dragSnapshotRef = useRef<{ bookmarkId: string; fromCollectionId: string; originalIndex: number } | null>(null);
+  const dragGenRef = useRef(0);
+
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => {
+      recentlyMovedToNewContainer.current = false;
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [dragItems]);
   const [editingBookmark, setEditingBookmark] = useState<Bookmark | null>(null);
   const [addingToCollection, setAddingToCollection] = useState<string | null>(null);
   const [menuColId, setMenuColId] = useState<string | null>(null);
@@ -92,6 +115,40 @@ export default function ContentArea({
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
+  // Grid layout (flex-wrap) has gaps between rows/columns that pointerWithin
+  // cannot hit — the pointer must be strictly inside a droppable rect, so over
+  // would lag and the first slot of a collection (above its first bookmark)
+  // would never trigger. closestCorners is distance-based with no dead zones.
+  const collisionDetection: CollisionDetection = useCallback((args) => {
+    const hits = closestCorners(args);
+    const first = hits[0]?.id;
+    if (typeof first === 'string' && first.startsWith('collection-')) {
+      const colId = first.slice('collection-'.length);
+      const bookmarks = args.droppableContainers.filter(
+        (c) =>
+          c.id !== args.active?.id &&
+          c.data?.current &&
+          (c.data.current as { type: string; collectionId: string }).type === 'bookmark' &&
+          (c.data.current as { type: string; collectionId: string }).collectionId === colId,
+      );
+      if (bookmarks.length > 0) {
+        const closest = closestCenter({ ...args, droppableContainers: bookmarks });
+        if (closest.length > 0) {
+          lastOverIdRef.current = String(closest[0].id);
+          return closest;
+        }
+      }
+    }
+    if (hits.length > 0) {
+      lastOverIdRef.current = String(hits[0].id);
+      return hits;
+    }
+    if (recentlyMovedToNewContainer.current) {
+      lastOverIdRef.current = args.active?.id != null ? String(args.active.id) : null;
+    }
+    return lastOverIdRef.current ? [{ id: lastOverIdRef.current }] : [];
+  }, [dragItems, bookmarksByCollection]);
+
   const activeBookmark = useMemo(() => {
     if (!activeId) return null;
     for (const bks of Object.values(bookmarksByCollection)) {
@@ -102,58 +159,209 @@ export default function ContentArea({
   }, [activeId, bookmarksByCollection]);
 
   function handleDragStart(event: DragStartEvent) {
-    setActiveId(event.active.id as string);
+    const { active } = event;
+    // Find X's actual collection from the committed REST state instead of
+    // trusting active.data.current.collectionId, which can be stale between
+    // two rapid drags (the sortable data re-registers on re-render).
+    let fromColId: string | null = null;
+    for (const [colId, list] of Object.entries(bookmarksByCollection)) {
+      if (list.some((b) => b.id === active.id)) { fromColId = colId; break; }
+    }
+    if (fromColId != null) {
+      const srcList = bookmarksByCollection[fromColId] || [];
+      dragSnapshotRef.current = {
+        bookmarkId: active.id as string,
+        fromCollectionId: fromColId,
+        originalIndex: srcList.findIndex((b) => b.id === active.id),
+      };
+      dragGenRef.current += 1;
+      setDragItems(
+        Object.fromEntries(
+          Object.entries(bookmarksByCollection).map(([colId, list]) => [colId, [...list]]),
+        ),
+      );
+    }
+    setActiveId(active.id as string);
   }
 
-  const dropTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  function handleDragOver(event: DragOverEvent) {
+    const { active, over } = event;
+    const overData = over?.data.current as { type: string; collectionId: string } | null;
+    if (!over) return;
+    if (!overData || (overData.type !== 'bookmark' && overData.type !== 'collection')) return;
+    // Self-over (hovering X's own slot): no-op, keep the mirror as-is. Reading
+    // X's data here would be stale and teleport X to the end of the collection.
+    if (over.id === active.id) return;
 
-  const clearOverlay = useCallback(() => {
-    if (dropTimerRef.current) clearTimeout(dropTimerRef.current);
-    setActiveId(null);
-  }, []);
+    const activeId = active.id as string;
+    const targetColId = overData.collectionId;
+
+    setDragItems((prev) => {
+      if (!prev) return prev;
+
+      // The mirror is the single source of truth for X's position.
+      let fromColId: string | null = null;
+      let fromIndex = -1;
+      for (const [colId, list] of Object.entries(prev)) {
+        const idx = list.findIndex((b) => b.id === activeId);
+        if (idx !== -1) { fromColId = colId; fromIndex = idx; break; }
+      }
+      if (fromColId == null || fromIndex === -1) return prev;
+
+      // Same-collection movement: dnd-kit's SortableContext handles the visual
+      // re-order natively — do NOT mutate the mirror array (it would break the
+      // sort animation). The mirror already contains X at its committed slot.
+      if (fromColId === targetColId) {
+        return prev;
+      }
+
+      const next: Record<string, Bookmark[]> = {};
+      for (const [colId, list] of Object.entries(prev)) next[colId] = [...list];
+
+      const [moved] = next[fromColId].splice(fromIndex, 1);
+      const movedItem = { ...moved, collectionId: targetColId };
+
+      if (overData.type === 'bookmark') {
+        const target = next[targetColId] || [];
+        const overIndex = target.findIndex((b) => b.id === over.id);
+        // Official isBelowOverItem modifier: when X's bottom is past over's
+        // bottom, insert AFTER over, not before. Without this, drops land one
+        // slot late (dnd-kit issue #1080: "next to last" bug).
+        const isBelowOverItem =
+          over != null &&
+          active.rect.current.translated != null &&
+          active.rect.current.translated.top > over.rect.top + over.rect.height;
+        const modifier = isBelowOverItem ? 1 : 0;
+        const insertAt = overIndex === -1 ? target.length : Math.min(overIndex + modifier, target.length);
+        target.splice(insertAt, 0, movedItem);
+        next[targetColId] = target;
+      } else {
+        next[targetColId] = [...(next[targetColId] || []), movedItem];
+      }
+
+      recentlyMovedToNewContainer.current = true;
+      return next;
+    });
+  }
 
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
-    if (!over || active.id === over.id) { clearOverlay(); return; }
+    const snapshot = dragSnapshotRef.current;
+    const overData = over?.data.current as { type: string; collectionId: string } | null;
+    dragSnapshotRef.current = null;
+    lastOverIdRef.current = null;
+    recentlyMovedToNewContainer.current = false;
 
-    const activeData = active.data.current as { type: string; collectionId: string } | null;
-    const overData = over.data.current as { type: string; collectionId: string } | null;
-    if (!activeData || !overData) { clearOverlay(); return; }
+    if (!snapshot) {
+      setActiveId(null);
+      setDragItems(null);
+      return;
+    }
 
-    if (activeData.type === 'bookmark' && overData.type === 'bookmark') {
-      if (activeData.collectionId === overData.collectionId) {
-        const colId = activeData.collectionId;
-        const current = bookmarksByCollection[colId] || [];
-        const oldIndex = current.findIndex((b) => b.id === active.id);
-        const newIndex = current.findIndex((b) => b.id === over.id);
-        if (oldIndex !== -1 && newIndex !== -1) {
-          onCollectionReorder(colId, arrayMove(current, oldIndex, newIndex), {
-            bookmarkId: active.id as string,
-            fromIndex: oldIndex,
-            toIndex: newIndex,
+    const activeId = active.id as string;
+    const overIsSelf = over != null && over.id === activeId;
+    const overIsBookmark = !overIsSelf && overData?.type === 'bookmark';
+    const overIsCollection = !overIsSelf && overData?.type === 'collection';
+
+    // Determine the target collection. When over is X itself (hovering its own
+    // slot in the target grid), X's own data carries its pre-drag collection,
+    // so fall back to the mirror position.
+    let targetColId: string | null = null;
+    if (overIsSelf) {
+      for (const [colId, list] of Object.entries(dragItems ?? {})) {
+        if (list.some((b) => b.id === activeId)) { targetColId = colId; break; }
+      }
+    } else if (overIsBookmark || overIsCollection) {
+      targetColId = overData?.collectionId ?? null;
+    }
+
+    if (!over || targetColId == null) {
+      setActiveId(null);
+      setDragItems(null);
+      return;
+    }
+
+    // X never left its collection (or was dropped back onto it): keep the
+    // original in-collection arrayMove behavior; collection droppable = no-op.
+    if (targetColId === snapshot.fromCollectionId) {
+      if (overIsBookmark) {
+        const current = bookmarksByCollection[targetColId] || [];
+        const overIndex = current.findIndex((b) => b.id === over?.id);
+        if (overIndex !== -1 && snapshot.originalIndex !== overIndex) {
+          onCollectionReorder(targetColId, arrayMove(current, snapshot.originalIndex, overIndex), {
+            bookmarkId: activeId,
+            fromIndex: snapshot.originalIndex,
+            toIndex: overIndex,
           });
         }
-        clearOverlay();
-      } else {
-        const targetItems = bookmarksByCollection[overData.collectionId] || [];
-        const newIndex = targetItems.findIndex((b) => b.id === over.id);
-        if (newIndex !== -1) {
-          dropTimerRef.current = setTimeout(() => {
-            onTransferBookmark(active.id as string, activeData.collectionId, overData.collectionId, newIndex);
-            setActiveId(null);
-          }, 200);
-        }
       }
-    } else if (activeData.type === 'bookmark' && overData.type === 'collection') {
-      const targetItems = bookmarksByCollection[overData.collectionId] || [];
-      dropTimerRef.current = setTimeout(() => {
-        onTransferBookmark(active.id as string, activeData.collectionId, overData.collectionId, targetItems.length);
-        setActiveId(null);
-      }, 200);
-    } else {
-      clearOverlay();
+      setActiveId(null);
+      setDragItems(null);
+      return;
     }
-  }, [bookmarksByCollection, onCollectionReorder, onTransferBookmark, clearOverlay]);
+
+    // Cross-collection: X is already a member of the target mirror list (it was
+    // inserted on boundary entry, then SortableContext animated it natively for
+    // in-collection moves). The mirror list is X-inclusive, so X's own index in
+    // the *re-ordered* mirror equals the insertion index into the X-free
+    // committed list (X's index = count of real items before it). Apply the same
+    // arrayMove that SortableContext just animated: move X from its current
+    // mirror slot to over's mirror slot. This is the official MultipleContainers
+    // dragEnd semantics and resolves self-over naturally (indexes equal → no-op).
+    const mirrorList = dragItems?.[targetColId] ?? [];
+    const activeMirrorIndex = mirrorList.findIndex((b) => b.id === activeId);
+    let newIndex: number;
+
+    if (overIsBookmark) {
+      const overMirrorIndex = mirrorList.findIndex((b) => b.id === over?.id);
+      if (activeMirrorIndex !== -1 && overMirrorIndex !== -1) {
+        if (activeMirrorIndex === overMirrorIndex) {
+          newIndex = activeMirrorIndex;
+        } else {
+          newIndex = arrayMove(mirrorList, activeMirrorIndex, overMirrorIndex).findIndex((b) => b.id === activeId);
+        }
+      } else if (activeMirrorIndex !== -1) {
+        newIndex = activeMirrorIndex;
+      } else {
+        newIndex = mirrorList.length;
+      }
+    } else {
+      newIndex = activeMirrorIndex !== -1 ? activeMirrorIndex : mirrorList.length;
+    }
+    newIndex = Math.max(0, Math.min(newIndex, mirrorList.length));
+
+    const gen = dragGenRef.current;
+    setActiveId(null);
+    // Snap the mirror to the committed position BEFORE clearing it. During the
+    // drag, in-collection movement is animated by SortableContext without the
+    // mirror array moving, so dragItems can still show X at its entry slot.
+    // Reordering the mirror to newIndex now makes the release frame identical
+    // to the committed props frame, eliminating the post-drop flicker.
+    setDragItems((prev) => {
+      if (!prev) return prev;
+      const target = prev[targetColId];
+      if (!target) return prev;
+      const idx = target.findIndex((b) => b.id === activeId);
+      if (idx === -1 || idx === newIndex) return prev;
+      const next: Record<string, Bookmark[]> = {};
+      for (const [colId, list] of Object.entries(prev)) next[colId] = [...list];
+      next[targetColId] = arrayMove(target, idx, newIndex);
+      return next;
+    });
+    void onTransferBookmark(activeId, snapshot.fromCollectionId, targetColId, newIndex).finally(() => {
+      if (dragGenRef.current === gen) {
+        setDragItems(null);
+      }
+    });
+  }, [bookmarksByCollection, dragItems, onCollectionReorder, onTransferBookmark]);
+
+  const handleDragCancel = useCallback(() => {
+    dragSnapshotRef.current = null;
+    lastOverIdRef.current = null;
+    recentlyMovedToNewContainer.current = false;
+    setActiveId(null);
+    setDragItems(null);
+  }, []);
 
   if (loading && collections.length === 0) {
     return (
@@ -172,10 +380,18 @@ export default function ContentArea({
   }
 
   return (
-    <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+    <DndContext
+      sensors={sensors}
+      collisionDetection={collisionDetection}
+      measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
+      onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
+      onDragEnd={handleDragEnd}
+      onDragCancel={handleDragCancel}
+    >
     <div ref={scrollRef} className="flex-1 overflow-y-auto px-6 py-4 space-y-8">
       {collections.map((collection) => {
-        const bookmarks = bookmarksByCollection[collection.id] || [];
+        const bookmarks = dragItems?.[collection.id] ?? bookmarksByCollection[collection.id] ?? [];
         const isCollapsed = collapsed[collection.id] ?? false;
 
         return (
@@ -290,7 +506,7 @@ export default function ContentArea({
           onClose={() => setAddingToCollection(null)}
         />
       )}
-      <DragOverlay dropAnimation={{ duration: 200, easing: 'ease-out' }}>
+      <DragOverlay dropAnimation={null}>
         {activeBookmark ? (
           <div className="rotate-3 scale-105 opacity-90">
             <BookmarkCard bookmark={activeBookmark} onEdit={() => {}} onDelete={() => {}} />

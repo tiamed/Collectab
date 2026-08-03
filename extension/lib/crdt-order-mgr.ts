@@ -96,7 +96,8 @@ export class CrdtOrderManager {
     const id = srcList.get(fromIndex) as string;
     if (id !== bookmarkId) return;
     srcList.delete(fromIndex, 1);
-    dstList.insert(toIndex, bookmarkId);
+    const clamped = Math.max(0, Math.min(toIndex, dstList.length));
+    dstList.insert(clamped, bookmarkId);
     this.doc.commit();
   }
 
