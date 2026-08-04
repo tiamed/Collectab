@@ -1,4 +1,4 @@
-import { clearDataCache } from './dataCache';
+import { clearDataCache, hasCachedData } from './dataCache';
 
 const STORAGE_KEY_BASE_URL = 'api_base_url';
 const STORAGE_KEY_ACCESS_TOKEN = 'access_token';
@@ -32,19 +32,30 @@ export async function loadApiBase() {
  * Update API base URL. When the URL changes, clear auth tokens, data cache,
  * and UI selection so the previous server's orgs/spaces cannot linger.
  */
-export async function setApiBase(url: string): Promise<{ changed: boolean }> {
+export async function setApiBase(url: string): Promise<{ changed: boolean; hadSession: boolean }> {
   const next = url.replace(/\/+$/, '');
   const changed = next !== apiBase;
   apiBase = next;
   await chrome.storage.local.set({ [STORAGE_KEY_BASE_URL]: apiBase });
 
+  let hadSession = false;
   if (changed) {
+    const before = await chrome.storage.local.get([
+      STORAGE_KEY_ACCESS_TOKEN,
+      STORAGE_KEY_REFRESH_TOKEN,
+      ...SESSION_UI_KEYS,
+    ]);
+    hadSession =
+      !!before[STORAGE_KEY_ACCESS_TOKEN] ||
+      !!before[STORAGE_KEY_REFRESH_TOKEN] ||
+      SESSION_UI_KEYS.some((k) => before[k]) ||
+      hasCachedData();
     await clearTokens();
     await clearDataCache();
     await chrome.storage.local.remove([...SESSION_UI_KEYS]);
   }
 
-  return { changed };
+  return { changed, hadSession };
 }
 
 export function getApiBase() {

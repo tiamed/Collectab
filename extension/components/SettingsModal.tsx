@@ -17,6 +17,7 @@ export default function SettingsModal({ onClose, onImportDone, onServerChanged, 
   const [serverUrl, setServerUrl] = useState(getApiBase());
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [latency, setLatency] = useState<number | null>(null);
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const niceTabInputRef = useRef<HTMLInputElement>(null);
@@ -30,13 +31,18 @@ export default function SettingsModal({ onClose, onImportDone, onServerChanged, 
   const handleSave = async () => {
     setSaving(true);
     setStatus('idle');
+    setLatency(null);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    const start = performance.now();
     try {
       const trimmed = serverUrl.trim().replace(/\/+$/, '');
-      const { changed } = await setApiBase(trimmed);
-      const res = await fetch(trimmed.replace(/\/api$/, '') + '/health');
+      const { changed, hadSession } = await setApiBase(trimmed);
+      const res = await fetch(trimmed.replace(/\/api$/, '') + '/health', { signal: controller.signal });
       if (res.ok) {
+        setLatency(Math.round(performance.now() - start));
         setStatus('success');
-        if (changed) {
+        if (changed && hadSession) {
           onServerChanged?.();
           return;
         }
@@ -46,6 +52,7 @@ export default function SettingsModal({ onClose, onImportDone, onServerChanged, 
     } catch {
       setStatus('error');
     } finally {
+      clearTimeout(timer);
       setSaving(false);
     }
   };
@@ -153,7 +160,9 @@ export default function SettingsModal({ onClose, onImportDone, onServerChanged, 
                 {saving ? 'Testing...' : 'Save & Test'}
               </button>
               {status === 'success' && (
-                <span className="text-[11px] text-[var(--accent)]">Connected</span>
+                <span className="text-[11px] text-[var(--accent)]">
+                  Connected{latency !== null ? ` (${latency} ms)` : ''}
+                </span>
               )}
               {status === 'error' && (
                 <span className="text-[11px] text-red-400">Connection failed</span>

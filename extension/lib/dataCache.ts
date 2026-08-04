@@ -2,8 +2,8 @@ import type { Space, Collection, Bookmark, User, Organization } from './api';
 
 const CACHE_KEY = 'data_cache_v2';
 const MAX_SPACES = 12;
-const MAX_COLLECTION_SETS = 12;
-const MAX_BOOKMARK_SPACES = 12;
+const MAX_COLLECTION_SETS = 30;
+const MAX_BOOKMARK_SPACES = 30;
 const TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days — long enough for idle sessions (e.g. watching a video)
 
 interface CacheEntry<T> {
@@ -75,6 +75,16 @@ function scheduleSave(immediate = false): Promise<void> {
       void write().then(() => resolve());
     }, 200);
   });
+}
+
+export function hasCachedData(): boolean {
+  return (
+    !!memory.user ||
+    !!memory.organizations ||
+    Object.keys(memory.spaces).length > 0 ||
+    Object.keys(memory.collections).length > 0 ||
+    Object.keys(memory.bookmarksBySpace).length > 0
+  );
 }
 
 /** Wipe in-memory + persisted cache (e.g. after switching API server). */
