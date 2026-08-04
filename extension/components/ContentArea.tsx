@@ -147,6 +147,41 @@ export default function ContentArea({
       }
     }
     if (hits.length > 0) {
+      // closestCorners ranks full-width collection droppables below nearby
+      // bookmark cards (corner distance grows with rect width), so an EMPTY
+      // collection can never win by distance alone. When the active rect
+      // actually overlaps an empty collection, target it directly.
+      const activeRect = args.active?.rect.current.translated;
+      if (activeRect) {
+        const emptyCol = args.droppableContainers.find((c) => {
+          if (typeof c.id !== 'string' || !c.id.startsWith('collection-')) return false;
+          if (c.id === args.active?.id) return false;
+          const data = c.data?.current as { type: string; collectionId: string } | null;
+          if (data?.type !== 'collection') return false;
+          const colId = c.id.slice('collection-'.length);
+          const hasBookmarks = args.droppableContainers.some(
+            (oc) =>
+              oc.id !== args.active?.id &&
+              (oc.data?.current as { type: string; collectionId: string } | null)?.type === 'bookmark' &&
+              (oc.data?.current as { type: string; collectionId: string } | null)?.collectionId === colId,
+          );
+          if (hasBookmarks) return false;
+          const rect = args.droppableRects.get(c.id);
+          if (!rect) return false;
+          return (
+            activeRect.left < rect.left + rect.width &&
+            activeRect.left + activeRect.width > rect.left &&
+            activeRect.top < rect.top + rect.height &&
+            activeRect.top + activeRect.height > rect.top
+          );
+        });
+        if (emptyCol) {
+          lastOverIdRef.current = String(emptyCol.id);
+          return [{ id: emptyCol.id }];
+        }
+      }
+    }
+    if (hits.length > 0) {
       lastOverIdRef.current = String(hits[0].id);
       return hits;
     }
