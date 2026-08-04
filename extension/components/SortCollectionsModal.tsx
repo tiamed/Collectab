@@ -51,6 +51,7 @@ export default function SortCollectionsModal({
   onReorder,
   onClose,
 }: SortCollectionsModalProps) {
+  const mousedownOnBackdropRef = useRef(false);
   const [orderedIds, setOrderedIds] = useState(() => collections.map((c) => c.id));
   const dirtyRef = useRef(false);
 
@@ -78,8 +79,19 @@ export default function SortCollectionsModal({
     .map((id) => collections.find((c) => c.id === id))
     .filter(Boolean) as Collection[];
 
+  const handleBackdropMouseDown = (e: React.MouseEvent) => {
+    mousedownOnBackdropRef.current = e.target === e.currentTarget;
+  };
+
+  const handleBackdropClick = (e: React.MouseEvent) => {
+    if (e.target !== e.currentTarget) return;
+    if (!mousedownOnBackdropRef.current) return;
+    mousedownOnBackdropRef.current = false;
+    onClose();
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--backdrop)]" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--backdrop)]" onMouseDown={handleBackdropMouseDown} onClick={handleBackdropClick}>
       <div
         className="flex w-full max-w-md flex-col rounded-lg border border-[var(--border)] bg-[var(--surface)] shadow-xl"
         onClick={(e) => e.stopPropagation()}

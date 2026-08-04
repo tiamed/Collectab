@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { X, UserPlus, Crown, Trash2 } from 'lucide-react';
 import {
   getOrgMembers,
@@ -25,6 +25,7 @@ interface MembersModalProps {
 }
 
 export default function MembersModal({ orgId, orgName, spaceId, spaceName, onClose, canChangeRoles = true, isOrgSpace = false }: MembersModalProps) {
+  const mousedownOnBackdropRef = useRef(false);
   const isOrgMode = !!orgId;
 
   const [owner, setOwner] = useState<{ id: string; email: string; name: string } | null>(null);
@@ -102,8 +103,19 @@ export default function MembersModal({ orgId, orgName, spaceId, spaceName, onClo
       : [{ value: 'member', label: 'Member' }]
     : [{ value: 'viewer', label: 'Viewer' }, { value: 'editor', label: 'Editor' }];
 
+  const handleBackdropMouseDown = (e: React.MouseEvent) => {
+    mousedownOnBackdropRef.current = e.target === e.currentTarget;
+  };
+
+  const handleBackdropClick = (e: React.MouseEvent) => {
+    if (e.target !== e.currentTarget) return;
+    if (!mousedownOnBackdropRef.current) return;
+    mousedownOnBackdropRef.current = false;
+    onClose();
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--backdrop)]" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--backdrop)]" onMouseDown={handleBackdropMouseDown} onClick={handleBackdropClick}>
       <div
         className="w-full max-w-md rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}

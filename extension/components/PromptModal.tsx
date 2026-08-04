@@ -19,6 +19,7 @@ export default function PromptModal({
   onSubmit,
   onClose,
 }: PromptModalProps) {
+  const mousedownOnBackdropRef = useRef(false);
   const [value, setValue] = useState(defaultValue);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -39,8 +40,19 @@ export default function PromptModal({
     }
   };
 
+  const handleBackdropMouseDown = (e: React.MouseEvent) => {
+    mousedownOnBackdropRef.current = e.target === e.currentTarget;
+  };
+
+  const handleBackdropClick = (e: React.MouseEvent) => {
+    if (e.target !== e.currentTarget) return;
+    if (!mousedownOnBackdropRef.current) return;
+    mousedownOnBackdropRef.current = false;
+    onClose();
+  };
+
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[var(--backdrop)]" onClick={onClose}>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[var(--backdrop)]" onMouseDown={handleBackdropMouseDown} onClick={handleBackdropClick}>
       <form
         className="w-full max-w-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] p-5 shadow-xl"
         onClick={(e) => e.stopPropagation()}

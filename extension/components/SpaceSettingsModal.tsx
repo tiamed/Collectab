@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { X } from 'lucide-react';
 import type { Space } from '@/lib/api';
 import EmojiIconPicker from './EmojiIconPicker';
@@ -10,6 +10,7 @@ interface SpaceSettingsModalProps {
 }
 
 export default function SpaceSettingsModal({ space, onSave, onClose }: SpaceSettingsModalProps) {
+  const mousedownOnBackdropRef = useRef(false);
   const [name, setName] = useState(space.name);
   const [icon, setIcon] = useState(space.icon);
   const [saving, setSaving] = useState(false);
@@ -28,8 +29,19 @@ export default function SpaceSettingsModal({ space, onSave, onClose }: SpaceSett
     }
   };
 
+  const handleBackdropMouseDown = (e: React.MouseEvent) => {
+    mousedownOnBackdropRef.current = e.target === e.currentTarget;
+  };
+
+  const handleBackdropClick = (e: React.MouseEvent) => {
+    if (e.target !== e.currentTarget) return;
+    if (!mousedownOnBackdropRef.current) return;
+    mousedownOnBackdropRef.current = false;
+    onClose();
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--backdrop)]" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--backdrop)]" onMouseDown={handleBackdropMouseDown} onClick={handleBackdropClick}>
       <form
         className="w-full max-w-md rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
