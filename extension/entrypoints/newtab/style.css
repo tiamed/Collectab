@@ -33,7 +33,7 @@
     --backdrop: rgba(0, 0, 0, 0.3);
   }
 
-  .dark {
+  :root[data-theme="dark"] {
     color-scheme: dark;
     --background: #1e1e2e;
     --foreground: #e5e7eb;
@@ -52,6 +52,30 @@
     --ring: #9761da;
     --radius: 0.5rem;
     --backdrop: rgba(0, 0, 0, 0.6);
+  }
+
+  /* Follow OS scheme when no explicit choice — explicit [data-theme="light"] wins. */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --background: #1e1e2e;
+      --foreground: #e5e7eb;
+      --muted: #9ca3af;
+      --surface: #3d3d52;
+      --surface-foreground: #e5e7eb;
+      --default: #3d3d52;
+      --default-foreground: #e5e7eb;
+      --accent: #9761da;
+      --accent-foreground: #ffffff;
+      --border: #334155;
+      --separator: #334155;
+      --field-background: #2d2d42;
+      --field-foreground: #e5e7eb;
+      --field-placeholder: #6b7280;
+      --ring: #9761da;
+      --radius: 0.5rem;
+      --backdrop: rgba(0, 0, 0, 0.6);
+    }
   }
 
   * {

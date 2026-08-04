@@ -1,28 +1,28 @@
 <!doctype html>
-<html lang="en" class="dark" data-theme="dark">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>New Tab</title>
-    <!-- Sync theme before first paint — no visibility:hidden (avoids blank/stuck page). -->
+    <!-- Sync theme before first paint — no visibility:hidden (avoids blank/stuck page). Only sets data-theme on an explicit choice; otherwise CSS @media (prefers-color-scheme) follows the OS and stays live. -->
     <script>
       (function () {
-        var KEY = 'theme';
-        var t = 'dark';
         try {
-          var cached = localStorage.getItem(KEY);
-          if (cached === 'light' || cached === 'dark') t = cached;
+          var t = localStorage.getItem('theme');
+          if (t === 'light' || t === 'dark') {
+            document.documentElement.setAttribute('data-theme', t);
+          }
         } catch (e) {}
-        var root = document.documentElement;
-        if (t === 'dark') {
-          root.classList.add('dark');
-          root.setAttribute('data-theme', 'dark');
-        } else {
-          root.classList.remove('dark');
-          root.setAttribute('data-theme', 'light');
-        }
       })();
     </script>
+    <!-- Critical background before CSS bundle loads — mirrors style.css :root/[data-theme]/@media. -->
+    <style>
+      html { background-color: #ffffff; }
+      @media (prefers-color-scheme: dark) {
+        html:not([data-theme="light"]) { background-color: #1e1e2e; }
+      }
+      html[data-theme="dark"] { background-color: #1e1e2e; }
+    </style>
   </head>
   <body class="bg-background text-foreground">
     <div id="root"></div>

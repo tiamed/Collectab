@@ -1,29 +1,14 @@
 <!doctype html>
-<html lang="en" class="dark" data-theme="dark">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Save Bookmark</title>
     <meta name="manifest.type" content="browser_action" />
-    <!-- Sync theme before first paint — no visibility:hidden. -->
-    <script>
-      (function () {
-        var KEY = 'theme';
-        var t = 'dark';
-        try {
-          var cached = localStorage.getItem(KEY);
-          if (cached === 'light' || cached === 'dark') t = cached;
-        } catch (e) {}
-        var root = document.documentElement;
-        if (t === 'dark') {
-          root.classList.add('dark');
-          root.setAttribute('data-theme', 'dark');
-        } else {
-          root.classList.remove('dark');
-          root.setAttribute('data-theme', 'light');
-        }
-      })();
-    </script>
+    <!-- Popup is dark-only (see style.css :root); paint the background before the CSS bundle loads. -->
+    <style>
+      html { background-color: #1e1e2e; }
+    </style>
   </head>
   <body class="bg-background text-foreground">
     <div id="root"></div>

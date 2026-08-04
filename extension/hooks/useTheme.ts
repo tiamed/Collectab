@@ -34,6 +34,20 @@ export function useTheme() {
     persistTheme(t);
   }, []);
 
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const onChange = () => {
+      try {
+        if (isTheme(localStorage.getItem(THEME_STORAGE_KEY))) return;
+      } catch {
+        return;
+      }
+      setThemeState(mq.matches ? 'dark' : 'light');
+    };
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
   const toggle = useCallback(() => {
     setTheme(theme === 'dark' ? 'light' : 'dark');
   }, [theme, setTheme]);
