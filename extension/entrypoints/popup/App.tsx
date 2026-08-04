@@ -15,6 +15,7 @@ import { resolveFaviconUrl } from '@/lib/favicon';
 import { notifyBookmarksChanged } from '@/lib/bookmarksSync';
 
 const STORAGE_KEY_ORG = 'active_org_id';
+const STORAGE_KEY_LAST_SPACE = 'popup_last_space';
 const STORAGE_KEY_LAST_COLLECTION = 'popup_last_collection';
 
 export default function App() {
@@ -58,7 +59,11 @@ export default function App() {
         }
       }
 
-      const stored = await chrome.storage.local.get([STORAGE_KEY_ORG, STORAGE_KEY_LAST_COLLECTION]);
+      const stored = await chrome.storage.local.get([
+        STORAGE_KEY_ORG,
+        STORAGE_KEY_LAST_SPACE,
+        STORAGE_KEY_LAST_COLLECTION,
+      ]);
       const orgId = stored[STORAGE_KEY_ORG] || null;
       setSelectedOrgId(orgId);
 
@@ -70,9 +75,13 @@ export default function App() {
       setSpaces(fetchedSpaces);
 
       if (fetchedSpaces.length > 0) {
-        const firstSpaceId = fetchedSpaces[0].id;
-        setSelectedSpaceId(firstSpaceId);
-        const cols = await getCollections(firstSpaceId).catch(() => []);
+        const lastSpaceId = stored[STORAGE_KEY_LAST_SPACE];
+        const spaceId =
+          lastSpaceId && fetchedSpaces.some((s) => s.id === lastSpaceId)
+            ? lastSpaceId
+            : fetchedSpaces[0].id;
+        setSelectedSpaceId(spaceId);
+        const cols = await getCollections(spaceId).catch(() => []);
         setCollections(cols);
 
         const lastCol = stored[STORAGE_KEY_LAST_COLLECTION];
@@ -96,22 +105,55 @@ export default function App() {
     setSelectedCollectionId(null);
     setCollections([]);
 
+    if (id) await chrome.storage.local.set({ [STORAGE_KEY_ORG]: id });
+    else await chrome.storage.local.remove(STORAGE_KEY_ORG);
+
     const fetchedSpaces = await getSpaces(id).catch(() => []);
     setSpaces(fetchedSpaces);
     if (fetchedSpaces.length > 0) {
-      setSelectedSpaceId(fetchedSpaces[0].id);
-      const cols = await getCollections(fetchedSpaces[0].id).catch(() => []);
+      const stored = await chrome.storage.local.get([
+        STORAGE_KEY_LAST_SPACE,
+        STORAGE_KEY_LAST_COLLECTION,
+      ]);
+      const lastSpaceId = stored[STORAGE_KEY_LAST_SPACE];
+      const spaceId =
+        lastSpaceId && fetchedSpaces.some((s) => s.id === lastSpaceId)
+          ? lastSpaceId
+          : fetchedSpaces[0].id;
+      setSelectedSpaceId(spaceId);
+      const cols = await getCollections(spaceId).catch(() => []);
       setCollections(cols);
-      if (cols.length > 0) setSelectedCollectionId(cols[0].id);
+      const lastCol = stored[STORAGE_KEY_LAST_COLLECTION];
+      if (lastCol && cols.some((c) => c.id === lastCol)) {
+        setSelectedCollectionId(lastCol);
+      } else if (cols.length > 0) {
+        setSelectedCollectionId(cols[0].id);
+      }
     }
   }
 
   async function handleSpaceChange(spaceId: string) {
     setSelectedSpaceId(spaceId);
     setSelectedCollectionId(null);
+    await chrome.storage.local.set({ [STORAGE_KEY_LAST_SPACE]: spaceId });
     const cols = await getCollections(spaceId).catch(() => []);
     setCollections(cols);
-    if (cols.length > 0) setSelectedCollectionId(cols[0].id);
+    if (cols.length > 0) {
+      const stored = await chrome.storage.local.get([STORAGE_KEY_LAST_COLLECTION]);
+      const lastCol = stored[STORAGE_KEY_LAST_COLLECTION];
+      if (lastCol && cols.some((c) => c.id === lastCol)) {
+        setSelectedCollectionId(lastCol);
+      } else {
+        setSelectedCollectionId(cols[0].id);
+      }
+    }
+  }
+
+  async function handleCollectionChange(collectionId: string) {
+    setSelectedCollectionId(collectionId);
+    if (collectionId) {
+      await chrome.storage.local.set({ [STORAGE_KEY_LAST_COLLECTION]: collectionId });
+    }
   }
 
   async function handleSave() {
@@ -242,7 +284,7 @@ export default function App() {
             <select
               className="w-full appearance-none rounded border border-[var(--border)] bg-[var(--background)] px-2.5 py-1.5 pr-7 text-xs text-[var(--foreground)] outline-none focus:ring-1 focus:ring-[var(--accent)]"
               value={selectedCollectionId || ''}
-              onChange={(e) => setSelectedCollectionId(e.target.value)}
+              onChange={(e) => handleCollectionChange(e.target.value)}
               disabled={collections.length === 0}
             >
               {collections.length === 0 && <option value="">No collections</option>}

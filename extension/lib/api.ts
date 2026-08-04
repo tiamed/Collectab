@@ -6,6 +6,7 @@ const STORAGE_KEY_REFRESH_TOKEN = 'refresh_token';
 const SESSION_UI_KEYS = [
   'active_org_id',
   'active_space_id',
+  'popup_last_space',
   'popup_last_collection',
   'personal_org_name',
 ] as const;
