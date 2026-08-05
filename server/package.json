@@ -13,17 +13,22 @@
     "db:migrate": "tsx src/database/migrate.ts"
   },
   "dependencies": {
+    "@better-auth/core": "^1.6.26",
+    "@better-auth/drizzle-adapter": "^1.6.26",
     "@hono/node-server": "^1.14.0",
-    "@hono/zod-validator": "^0.5.0",
+    "@hono/zod-validator": "^0.9.0",
     "bcrypt": "^5.1.1",
+    "better-auth": "^1.6.26",
+    "better-invite": "^0.5.7",
     "dotenv": "^16.5.0",
-    "drizzle-orm": "^0.39.0",
+    "drizzle-orm": "^0.45.2",
     "hono": "^4.7.0",
     "jsonwebtoken": "^9.0.2",
     "loro-crdt": "^1.4.11",
     "pg": "^8.16.0",
+    "resend": "^6.18.1",
     "ws": "^8.18.0",
-    "zod": "^3.25.0"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/bcrypt": "^5.0.2",
@@ -32,7 +37,7 @@
     "@types/pg": "^8.11.11",
     "@types/supertest": "^7.2.1",
     "@types/ws": "^8.18.0",
-    "drizzle-kit": "^0.31.0",
+    "drizzle-kit": "^0.31.10",
     "tsx": "^4.19.0",
     "typescript": "^5.9.3",
     "vitest": "^4.1.10"

@@ -4,8 +4,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { WebSocketServer } from 'ws';
-import jwt from 'jsonwebtoken';
-import { authRoutes } from './api/routes/auth.js';
+import { auth } from './auth/auth.js';
 import { spaceRoutes } from './api/routes/spaces.js';
 import { collectionRoutes } from './api/routes/collections.js';
 import { bookmarkRoutes } from './api/routes/bookmarks.js';
@@ -13,6 +12,8 @@ import { searchRoutes } from './api/routes/search.js';
 import { importRoutes } from './api/routes/import.js';
 import { memberRoutes } from './api/routes/members.js';
 import { orgRoutes } from './api/routes/organizations.js';
+import { meRoutes } from './api/routes/me.js';
+import { adminRoutes } from './api/routes/admin.js';
 import { WsRelayManager } from './server/loro-manager.js';
 import { ShadowDocManager } from './server/shadow-doc-manager.js';
 import { SnapshotStore } from './server/snapshot-store.js';
@@ -26,6 +27,7 @@ async function main() {
 
   const env = getEnv();
   const app = new Hono();
+  
 
   const snapshotStore = new SnapshotStore();
   const shadowDocManager = new ShadowDocManager();
@@ -40,7 +42,8 @@ async function main() {
 
   app.get('/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
-  app.route('/api/auth', authRoutes);
+  app.on(['POST', 'GET'], '/api/auth/*', (c) => auth.handler(c.req.raw));
+  app.route('/api/auth/me', meRoutes);
   app.route('/api/spaces', spaceRoutes);
   app.route('/api/collections', collectionRoutes);
   app.route('/api/bookmarks', bookmarkRoutes);
@@ -48,6 +51,7 @@ async function main() {
   app.route('/api/import', importRoutes);
   app.route('/api/members', memberRoutes);
   app.route('/api/orgs', orgRoutes);
+  app.route('/api/admin', adminRoutes);
 
   const server = serve({ fetch: app.fetch, port: env.PORT }, (info) => {
     console.log(`Server running on http://localhost:${info.port}`);
@@ -86,16 +90,15 @@ async function main() {
           return;
         }
 
-        let userId: string;
-        try {
-          const payload = jwt.verify(token, env.JWT_SECRET) as { sub: string };
-          userId = payload.sub;
-        } catch {
+        const session = await auth.api.getSession({
+          headers: new Headers({ Authorization: `Bearer ${token}` }),
+        });
+        if (!session) {
           socket.destroy();
           return;
         }
 
-        if (!(await hasSpaceAccess(userId, spaceId))) {
+        if (!(await hasSpaceAccess(session.user.id, spaceId))) {
           socket.destroy();
           return;
         }

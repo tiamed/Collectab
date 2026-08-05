@@ -1,11 +1,12 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
-import { eq, and, asc, sql } from 'drizzle-orm';
+import { eq, and, asc, sql, count } from 'drizzle-orm';
 import { z } from 'zod';
 import { getDb } from '../../database/client.js';
 import { bookmarks, collections, spaces, organizations, orgMembers, spaceMembers } from '../../database/schema.js';
 import { authMiddleware, type AuthEnv } from '../middleware/auth.js';
 import { canEditSpace } from './permissions.js';
+import { getQuotaForRole } from '../../auth/quota.js';
 
 async function hasCollectionAccess(db: ReturnType<typeof getDb>, collectionId: string, userId: string): Promise<boolean> {
   const [col] = await db.select().from(collections).where(eq(collections.id, collectionId));
@@ -54,6 +55,37 @@ async function requireCollectionEdit(
   const [space] = await db.select().from(spaces).where(eq(spaces.id, col.spaceId));
   if (!space || !(await canEditSpace(db, space, userId))) {
     return { ok: false, status: 403, error: 'Forbidden' };
+  }
+  return { ok: true };
+}
+
+async function countUserBookmarks(
+  db: ReturnType<typeof getDb>,
+  userId: string,
+): Promise<number> {
+  const [row] = await db
+    .select({ total: count() })
+    .from(bookmarks)
+    .innerJoin(collections, eq(bookmarks.collectionId, collections.id))
+    .innerJoin(spaces, eq(collections.spaceId, spaces.id))
+    .where(eq(spaces.ownerId, userId));
+  return row?.total ?? 0;
+}
+
+async function enforceBookmarkQuota(
+  db: ReturnType<typeof getDb>,
+  userId: string,
+  role: string,
+  additional: number,
+): Promise<{ ok: true } | { ok: false; status: 403; error: string }> {
+  const quota = getQuotaForRole(role);
+  const current = await countUserBookmarks(db, userId);
+  if (current + additional > quota) {
+    return {
+      ok: false,
+      status: 403,
+      error: `Bookmark quota exceeded (${current}/${quota}). Please deploy your own Collectab server for unlimited bookmarks.`,
+    };
   }
   return { ok: true };
 }
@@ -204,6 +236,11 @@ bookmarkRoutes.post('/', zValidator('json', createSchema), async (c) => {
     return c.json({ error: access.error }, access.status);
   }
 
+  const quotaCheck = await enforceBookmarkQuota(db, userId, c.get('userRole'), 1);
+  if (!quotaCheck.ok) {
+    return c.json({ error: quotaCheck.error }, quotaCheck.status);
+  }
+
   const [maxOrder] = await db
     .select({ max: sql<number>`COALESCE(MAX(${bookmarks.orderIndex}), -1)` })
     .from(bookmarks)
@@ -233,6 +270,11 @@ bookmarkRoutes.post('/batch', zValidator('json', batchCreateSchema), async (c) =
   const access = await requireCollectionEdit(db, body.collectionId, userId);
   if (!access.ok) {
     return c.json({ error: access.error }, access.status);
+  }
+
+  const quotaCheck = await enforceBookmarkQuota(db, userId, c.get('userRole'), body.bookmarks.length);
+  if (!quotaCheck.ok) {
+    return c.json({ error: quotaCheck.error }, quotaCheck.status);
   }
 
   const values = body.bookmarks.map((b, i) => ({
