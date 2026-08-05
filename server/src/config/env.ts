@@ -20,6 +20,19 @@ const envSchema = z.object({
     .string()
     .default('')
     .transform((s) => s.split(',').map((id) => id.trim()).filter(Boolean)),
+  ROLE_QUOTAS: z
+    .string()
+    .default('')
+    .transform((s) => {
+      if (!s.trim()) return undefined;
+      const quotas: Record<string, number> = {};
+      for (const pair of s.split(',')) {
+        const [role, value] = pair.split('=').map((x) => x.trim());
+        const num = Number(value);
+        if (role && !Number.isNaN(num)) quotas[role] = num;
+      }
+      return Object.keys(quotas).length > 0 ? quotas : undefined;
+    }),
   INVITE_MODE: z.enum(['open', 'invite-only']).default('open'),
   RESEND_API_KEY: z.string().optional(),
   RESEND_FROM_EMAIL: z.string().optional(),
