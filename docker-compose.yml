@@ -27,6 +27,8 @@ services:
       CORS_ORIGIN: "*"
       DEFAULT_ROLE: ${DEFAULT_ROLE:-guest}
       ADMIN_USER_IDS: ${ADMIN_USER_IDS:-}
+      ROLE_QUOTAS: ${ROLE_QUOTAS:-guest=10,user=500,admin=unlimited}
+      DISABLE_QUOTAS: ${DISABLE_QUOTAS:-false}
       INVITE_MODE: ${INVITE_MODE:-open}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-}

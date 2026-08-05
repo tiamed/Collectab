@@ -79,6 +79,8 @@ async function enforceBookmarkQuota(
   additional: number,
 ): Promise<{ ok: true } | { ok: false; status: 403; error: string }> {
   const quota = getQuotaForRole(role);
+  if (quota === null) return { ok: true };
+
   const current = await countUserBookmarks(db, userId);
   if (current + additional > quota) {
     return {

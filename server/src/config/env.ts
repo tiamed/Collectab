@@ -25,14 +25,23 @@ const envSchema = z.object({
     .default('')
     .transform((s) => {
       if (!s.trim()) return undefined;
-      const quotas: Record<string, number> = {};
+      const quotas: Record<string, number | null> = {};
       for (const pair of s.split(',')) {
         const [role, value] = pair.split('=').map((x) => x.trim());
-        const num = Number(value);
-        if (role && !Number.isNaN(num)) quotas[role] = num;
+        const lowered = value?.toLowerCase();
+        if (role && (lowered === 'unlimited' || lowered === 'inf' || value === '-1')) {
+          quotas[role] = null;
+        } else {
+          const num = Number(value);
+          if (role && !Number.isNaN(num)) quotas[role] = num;
+        }
       }
       return Object.keys(quotas).length > 0 ? quotas : undefined;
     }),
+  DISABLE_QUOTAS: z
+    .string()
+    .default('false')
+    .transform((s) => s === 'true' || s === '1'),
   INVITE_MODE: z.enum(['open', 'invite-only']).default('open'),
   RESEND_API_KEY: z.string().optional(),
   RESEND_FROM_EMAIL: z.string().optional(),

@@ -1,14 +1,20 @@
 import { getEnv } from '../config/env.js';
 
-const DEFAULT_QUOTAS: Record<string, number> = {
+const DEFAULT_QUOTAS: Record<string, number | null> = {
   guest: 10,
   user: 500,
-  admin: 10000,
+  admin: null,
 };
 
-export function getQuotaForRole(role: string | null | undefined): number {
-  const key = role ?? 'guest';
+/**
+ * Returns the bookmark quota for a role, or null when unlimited.
+ * Quotas are disabled entirely when DISABLE_QUOTAS is set.
+ */
+export function getQuotaForRole(role: string | null | undefined): number | null {
   const env = getEnv();
+  if (env.DISABLE_QUOTAS) return null;
+
+  const key = role ?? 'guest';
   if (env.ROLE_QUOTAS && env.ROLE_QUOTAS[key] !== undefined) {
     return env.ROLE_QUOTAS[key];
   }
