@@ -106,7 +106,7 @@ export default function App() {
     });
   }, []);
 
-  const { user, loading: authLoading, login, register, logout } = useAuth(ready, bootUser);
+  const { user, loading: authLoading, login, register, loginWithGoogle, logout } = useAuth(ready, bootUser);
   const { theme, toggle: toggleTheme } = useTheme();
 
   const sessionUser = user ?? bootUser;
@@ -557,7 +557,7 @@ export default function App() {
         </button>
 
         {showAuth && (
-          <AuthModal onClose={() => setShowAuth(false)} onLogin={login} onRegister={register} />
+          <AuthModal onClose={() => setShowAuth(false)} onLogin={login} onRegister={register} onLoginWithGoogle={loginWithGoogle} />
         )}
         {showSettings && (
           <SettingsModal
@@ -565,6 +565,7 @@ export default function App() {
             onImportDone={handleImportDone}
             onServerChanged={() => { window.location.reload(); }}
             activeOrgId={activeOrgId}
+            user={user}
           />
         )}
       </div>
@@ -656,7 +657,7 @@ export default function App() {
         />
       )}
       {showAuth && (
-        <AuthModal onClose={() => setShowAuth(false)} onLogin={login} onRegister={register} />
+        <AuthModal onClose={() => setShowAuth(false)} onLogin={login} onRegister={register} onLoginWithGoogle={loginWithGoogle} />
       )}
       {membersModal?.type === 'space' && (
         <MembersModal

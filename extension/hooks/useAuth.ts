@@ -48,11 +48,18 @@ export function useAuth(ready: boolean, initialUser: api.User | null = null) {
     return user;
   }, []);
 
+  const loginWithGoogle = useCallback(async () => {
+    const { user } = await api.loginWithGoogle();
+    setCachedUser(user);
+    setUser(user);
+    return user;
+  }, []);
+
   const logout = useCallback(async () => {
     await api.logout();
     setCachedUser(null);
     setUser(null);
   }, []);
 
-  return { user, loading, login, register, logout, isLoggedIn: !!user };
+  return { user, loading, login, register, loginWithGoogle, logout, isLoggedIn: !!user };
 }

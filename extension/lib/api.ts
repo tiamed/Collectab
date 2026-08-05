@@ -2,7 +2,6 @@ import { clearDataCache, hasCachedData } from './dataCache';
 
 const STORAGE_KEY_BASE_URL = 'api_base_url';
 const STORAGE_KEY_ACCESS_TOKEN = 'access_token';
-const STORAGE_KEY_REFRESH_TOKEN = 'refresh_token';
 const SESSION_UI_KEYS = [
   'active_org_id',
   'active_space_id',
@@ -14,18 +13,14 @@ const DEFAULT_API_BASE = 'http://localhost:3001/api';
 
 let apiBase: string = DEFAULT_API_BASE;
 let accessToken: string | null = null;
-let refreshToken: string | null = null;
 
 export async function loadApiBase() {
-  const stored = await chrome.storage.local.get([STORAGE_KEY_BASE_URL, STORAGE_KEY_ACCESS_TOKEN, STORAGE_KEY_REFRESH_TOKEN]);
+  const stored = await chrome.storage.local.get([STORAGE_KEY_BASE_URL, STORAGE_KEY_ACCESS_TOKEN]);
   if (stored[STORAGE_KEY_BASE_URL]) {
     apiBase = stored[STORAGE_KEY_BASE_URL];
   }
   if (stored[STORAGE_KEY_ACCESS_TOKEN]) {
     accessToken = stored[STORAGE_KEY_ACCESS_TOKEN];
-  }
-  if (stored[STORAGE_KEY_REFRESH_TOKEN]) {
-    refreshToken = stored[STORAGE_KEY_REFRESH_TOKEN];
   }
 }
 
@@ -43,14 +38,9 @@ export async function setApiBase(url: string): Promise<{ changed: boolean; hadSe
   if (changed) {
     const before = await chrome.storage.local.get([
       STORAGE_KEY_ACCESS_TOKEN,
-      STORAGE_KEY_REFRESH_TOKEN,
       ...SESSION_UI_KEYS,
     ]);
-    hadSession =
-      !!before[STORAGE_KEY_ACCESS_TOKEN] ||
-      !!before[STORAGE_KEY_REFRESH_TOKEN] ||
-      SESSION_UI_KEYS.some((k) => before[k]) ||
-      hasCachedData();
+    hadSession = !!before[STORAGE_KEY_ACCESS_TOKEN] || SESSION_UI_KEYS.some((k) => before[k]) || hasCachedData();
     await clearTokens();
     await clearDataCache();
     await chrome.storage.local.remove([...SESSION_UI_KEYS]);
@@ -71,42 +61,17 @@ export function isLoggedIn() {
   return !!accessToken;
 }
 
-async function persistTokens(access: string, refresh: string) {
+async function persistToken(access: string) {
   accessToken = access;
-  refreshToken = refresh;
-  await chrome.storage.local.set({
-    [STORAGE_KEY_ACCESS_TOKEN]: access,
-    [STORAGE_KEY_REFRESH_TOKEN]: refresh,
-  });
+  await chrome.storage.local.set({ [STORAGE_KEY_ACCESS_TOKEN]: access });
 }
 
 async function clearTokens() {
   accessToken = null;
-  refreshToken = null;
-  await chrome.storage.local.remove([STORAGE_KEY_ACCESS_TOKEN, STORAGE_KEY_REFRESH_TOKEN]);
+  await chrome.storage.local.remove([STORAGE_KEY_ACCESS_TOKEN]);
 }
 
-async function tryRefreshToken(): Promise<boolean> {
-  if (!refreshToken) return false;
-  try {
-    const res = await fetch(`${apiBase}/auth/refresh`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken }),
-    });
-    if (!res.ok) {
-      await clearTokens();
-      return false;
-    }
-    const data = await res.json();
-    await persistTokens(data.accessToken, data.refreshToken);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function request<T>(path: string, options: RequestInit = {}, retry = true): Promise<T> {
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
@@ -118,13 +83,6 @@ async function request<T>(path: string, options: RequestInit = {}, retry = true)
   const res = await fetch(`${apiBase}${path}`, { ...options, headers });
 
   if (res.status === 204) return undefined as T;
-
-  if (res.status === 401 && retry && refreshToken) {
-    const refreshed = await tryRefreshToken();
-    if (refreshed) {
-      return request<T>(path, options, false);
-    }
-  }
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
@@ -140,24 +98,71 @@ export interface User {
   email: string;
   name: string;
   avatarUrl?: string | null;
+  role?: string | null;
+}
+
+async function signInRequest(
+  path: string,
+  body: Record<string, unknown>,
+): Promise<{ user: User; token: string }> {
+  const res = await fetch(`${apiBase}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: res.statusText }));
+    throw new Error(err.message || `Request failed: ${res.status}`);
+  }
+  const data = await res.json();
+  const token = data.token ?? data.data?.token;
+  if (!token) throw new Error('No session token returned');
+  await persistToken(token);
+  return { user: data.user ?? data.data?.user, token };
 }
 
 export async function login(email: string, password: string): Promise<{ user: User }> {
-  const data = await request<{ user: User; accessToken: string; refreshToken: string }>('/auth/login', {
-    method: 'POST',
-    body: JSON.stringify({ email, password }),
-  });
-  await persistTokens(data.accessToken, data.refreshToken);
-  return { user: data.user };
+  return signInRequest('/auth/sign-in/email', { email, password });
 }
 
 export async function register(email: string, password: string, name: string): Promise<{ user: User }> {
-  const data = await request<{ user: User; accessToken: string; refreshToken: string }>('/auth/register', {
+  return signInRequest('/auth/sign-up/email', { email, password, name });
+}
+
+export async function loginWithGoogle(): Promise<{ user: User }> {
+  // Request an OAuth authorization URL from better-auth
+  const res = await fetch(`${apiBase}/auth/sign-in/social`, {
     method: 'POST',
-    body: JSON.stringify({ email, password, name }),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider: 'google', callbackURL: `${apiBase}/auth/callback/google` }),
   });
-  await persistTokens(data.accessToken, data.refreshToken);
-  return { user: data.user };
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: res.statusText }));
+    throw new Error(err.message || `Google login failed: ${res.status}`);
+  }
+  const { url } = await res.json();
+  if (!url) throw new Error('Google login is not enabled on this server');
+
+  // Launch the OAuth flow in a secure browser context (MV3 extensions cannot
+  // be redirected, so chrome.identity is the sanctioned path).
+  const redirectUrl = await new Promise<string>((resolve, reject) => {
+    chrome.identity.launchWebAuthFlow({ url, interactive: true }, (callbackUrl) => {
+      if (chrome.runtime.lastError || !callbackUrl) {
+        reject(new Error(chrome.runtime.lastError?.message || 'Google login cancelled'));
+      } else {
+        resolve(callbackUrl);
+      }
+    });
+  });
+
+  const callback = new URL(redirectUrl);
+  const token = callback.searchParams.get('token') ?? callback.searchParams.get('session_token');
+  if (!token) throw new Error('Google login did not return a session');
+  await persistToken(token);
+
+  const user = await getMe();
+  if (!user) throw new Error('Could not load user after Google login');
+  return { user };
 }
 
 export async function getMe(): Promise<User | null> {
@@ -171,6 +176,16 @@ export async function getMe(): Promise<User | null> {
 }
 
 export async function logout() {
+  if (accessToken) {
+    try {
+      await fetch(`${apiBase}/auth/sign-out`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+    } catch {
+      // server-side session revocation is best-effort
+    }
+  }
   await clearTokens();
 }
 

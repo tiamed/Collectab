@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
-import { X, Upload, Download } from 'lucide-react';
+import { X, Upload, Download, Shield } from 'lucide-react';
 import { getApiBase, setApiBase, importFromNiceTab, importFromToby, importNative, exportData } from '@/lib/api';
+import type { User } from '@/lib/api';
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -10,9 +11,10 @@ interface SettingsModalProps {
   activeOrgId?: string | null;
   activeOrgName?: string;
   onDeleteAllSpaces?: () => void;
+  user?: User | null;
 }
 
-export default function SettingsModal({ onClose, onImportDone, onServerChanged, activeOrgId, activeOrgName = 'Personal', onDeleteAllSpaces }: SettingsModalProps) {
+export default function SettingsModal({ onClose, onImportDone, onServerChanged, activeOrgId, activeOrgName = 'Personal', onDeleteAllSpaces, user }: SettingsModalProps) {
   const mousedownOnBackdropRef = useRef(false);
   const [serverUrl, setServerUrl] = useState(getApiBase());
   const [saving, setSaving] = useState(false);
@@ -138,6 +140,23 @@ export default function SettingsModal({ onClose, onImportDone, onServerChanged, 
         </div>
 
         <div className="space-y-5">
+          {user && (
+            <div>
+              <label className="mb-1 flex items-center gap-1 text-[11px] font-medium text-[var(--muted)]">
+                <Shield className="size-3" />
+                Account
+              </label>
+              <div className="rounded border border-[var(--border)] bg-[var(--background)] px-3 py-2">
+                <p className="text-xs text-[var(--foreground)]">{user.name}</p>
+                <p className="text-[10px] text-[var(--muted)]">{user.email}</p>
+                {user.role && (
+                  <p className="mt-1 text-[10px] uppercase tracking-wide text-[var(--accent)]">
+                    {user.role === 'guest' ? 'Guest (limited quota)' : user.role}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
           {/* Server URL */}
           <div>
             <label className="mb-1 block text-[11px] font-medium text-[var(--muted)]">Server URL</label>
