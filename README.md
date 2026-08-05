@@ -87,8 +87,7 @@ docker compose exec postgres pg_isready -U postgres
 docker pull ghcr.io/tiamed/collectab/server:latest
 docker run --rm -p 3001:3001 \
   -e DATABASE_URL=postgresql://postgres:postgres@host.docker.internal:5432/collectab \
-  -e JWT_SECRET=your-secret-at-least-32-chars-long \
-  -e JWT_REFRESH_SECRET=your-refresh-secret-at-least-32-chars \
+  -e BETTER_AUTH_SECRET=your-secret-at-least-32-chars-long \
   ghcr.io/tiamed/collectab/server:latest
 ```
 
@@ -122,14 +121,30 @@ Copy `server/.env.example` to `server/.env` and customize:
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `DATABASE_URL` | PostgreSQL connection string | `postgresql://postgres:postgres@localhost:5432/collectab` |
-| `JWT_SECRET` | Secret for signing access tokens (min 32 chars) | — |
-| `JWT_REFRESH_SECRET` | Secret for signing refresh tokens | — |
-| `JWT_ACCESS_EXPIRY_SECONDS` | Access token lifetime | `900` |
-| `JWT_REFRESH_EXPIRY_SECONDS` | Refresh token lifetime | `604800` |
+| `BETTER_AUTH_SECRET` | Secret for signing auth tokens (min 32 chars) | — |
+| `BETTER_AUTH_URL` | Public URL of the API server | `http://localhost:3001` |
 | `PORT` | Server port | `3001` |
 | `CORS_ORIGIN` | Allowed CORS origins | `*` |
+| `TRUSTED_ORIGINS` | Comma-separated extra origins (e.g. `chrome-extension://<id>`) | — |
+| `DEFAULT_ROLE` | Role assigned on signup (`guest` / `user` / `admin`) | `guest` |
+| `ADMIN_USER_IDS` | Comma-separated user IDs with admin privileges | — |
+| `INVITE_MODE` | `open` (anyone can sign up as guest) or `invite-only` | `open` |
+| `RESEND_API_KEY` | Optional — enables password-reset email + private invites | — |
+| `RESEND_FROM_EMAIL` | From address for auth emails | `Collectab <noreply@collectab.app>` |
+| `OAUTH_GOOGLE_CLIENT_ID` | Optional — enables Google sign-in | — |
+| `OAUTH_GOOGLE_CLIENT_SECRET` | Google OAuth client secret | — |
+| `RATE_LIMIT_WINDOW_SECONDS` | Rate-limit window | `60` |
+| `RATE_LIMIT_MAX` | Max requests per window per IP | `20` |
 
-> **Production**: Always change `JWT_SECRET`, `JWT_REFRESH_SECRET`, and `POSTGRES_PASSWORD` to strong random values.
+> **Production**: Always change `BETTER_AUTH_SECRET` and `POSTGRES_PASSWORD` to strong random values.
+
+### Authentication & Roles
+
+- **Self-hosted control**: set `INVITE_MODE=invite-only` to require an invitation before anyone can register. In `open` mode (default), anyone can register but gets the limited `guest` role.
+- **Roles** control the bookmark quota: `guest` = 10 bookmarks, `user` = 500, `admin` = unlimited. To create invites or change roles, set `ADMIN_USER_IDS` to your account's user ID.
+- **Create an invite** (from an admin account): `POST /api/admin/invite` with `{ "role": "user" }` — the response contains a shareable link. Invitees sign up themselves and set their own password; no email service required.
+- **Email is optional**: without `RESEND_API_KEY`, password-reset links are printed to the server console and private invites fall back to manual link sharing. Set a Resend key to enable email delivery.
+- **Google sign-in**: configure the `OAUTH_GOOGLE_*` variables and add the callback URL `<BETTER_AUTH_URL>/api/auth/callback/google` to your Google OAuth app.
 
 ---
 
@@ -182,6 +197,6 @@ git push origin v0.1.0
 ## Tech Stack
 
 - **Extension**: WXT + React 19 + Tailwind CSS v4 + Lucide icons
-- **Server**: Hono + PostgreSQL + Drizzle ORM + JWT auth
+- **Server**: Hono + PostgreSQL + Drizzle ORM + Better Auth
 - **Drag & Drop**: @dnd-kit/core + @dnd-kit/sortable
 - **Real-time Sync**: Loro CRDT (loro-crdt) + WebSocket

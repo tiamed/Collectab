@@ -22,8 +22,16 @@ services:
       - "3001:3001"
     environment:
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/collectab
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-refresh-secret}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-dev-better-auth-secret-change-in-production-32chars}
+      BETTER_AUTH_URL: http://localhost:3001
+      CORS_ORIGIN: "*"
+      DEFAULT_ROLE: ${DEFAULT_ROLE:-guest}
+      ADMIN_USER_IDS: ${ADMIN_USER_IDS:-}
+      INVITE_MODE: ${INVITE_MODE:-open}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-}
+      OAUTH_GOOGLE_CLIENT_ID: ${OAUTH_GOOGLE_CLIENT_ID:-}
+      OAUTH_GOOGLE_CLIENT_SECRET: ${OAUTH_GOOGLE_CLIENT_SECRET:-}
       PORT: 3001
     depends_on:
       postgres:
