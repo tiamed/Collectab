@@ -15,8 +15,8 @@ import { memberRoutes } from './api/routes/members.js';
 import { orgRoutes } from './api/routes/organizations.js';
 import { WsRelayManager } from './server/loro-manager.js';
 import { ShadowDocManager } from './server/shadow-doc-manager.js';
-import { SnapshotStore } from './server/snapshot-store.js';
 import { SyncBatcher } from './server/sync-batcher.js';
+import { setSpaceInvalidator } from './server/space-invalidate.js';
 import { getPool } from './database/client.js';
 import { runMigrations } from './database/migrate.js';
 import { getEnv } from './config/env.js';
@@ -27,11 +27,31 @@ async function main() {
   const env = getEnv();
   const app = new Hono();
 
-  const snapshotStore = new SnapshotStore();
   const shadowDocManager = new ShadowDocManager();
   const syncBatcher = new SyncBatcher(shadowDocManager);
   const roomManager = new WsRelayManager(shadowDocManager, syncBatcher);
-  shadowDocManager.startAutoSnapshot(snapshotStore);
+
+  setSpaceInvalidator(async (spaceId) => {
+    await syncBatcher.flushNow(spaceId);
+    shadowDocManager.evict(spaceId);
+  });
+
+  let shuttingDown = false;
+  const shutdown = async (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`Received ${signal}, flushing pending CRDT order writes…`);
+    const force = setTimeout(() => process.exit(1), 5000);
+    try {
+      await syncBatcher.flushPendingAll();
+    } catch (err) {
+      console.error('Shutdown flush failed:', err);
+    }
+    clearTimeout(force);
+    process.exit(0);
+  };
+  process.on('SIGTERM', () => void shutdown('SIGTERM'));
+  process.on('SIGINT', () => void shutdown('SIGINT'));
 
   setInterval(() => shadowDocManager.cleanStaleRooms(), 60 * 60 * 1000);
 

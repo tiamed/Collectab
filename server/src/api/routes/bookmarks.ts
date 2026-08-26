@@ -6,7 +6,18 @@ import { getDb } from '../../database/client.js';
 import { bookmarks, collections, spaces, organizations, orgMembers, spaceMembers } from '../../database/schema.js';
 import { authMiddleware, type AuthEnv } from '../middleware/auth.js';
 import { canEditSpace } from './permissions.js';
+import { invalidateSpace } from '../../server/space-invalidate.js';
 
+async function spaceIdForCollection(
+  db: ReturnType<typeof getDb>,
+  collectionId: string,
+): Promise<string | null> {
+  const [col] = await db
+    .select({ spaceId: collections.spaceId })
+    .from(collections)
+    .where(eq(collections.id, collectionId));
+  return col?.spaceId ?? null;
+}
 async function hasCollectionAccess(db: ReturnType<typeof getDb>, collectionId: string, userId: string): Promise<boolean> {
   const [col] = await db.select().from(collections).where(eq(collections.id, collectionId));
   if (!col) return false;
@@ -182,6 +193,9 @@ bookmarkRoutes.put('/reorder', zValidator('json', reorderSchema), async (c) => {
     }
   });
 
+  const spaceId = await spaceIdForCollection(db, collectionId);
+  if (spaceId) await invalidateSpace(spaceId);
+
   return c.json({ success: true });
 });
 
@@ -263,6 +277,10 @@ bookmarkRoutes.put('/:id', zValidator('json', updateSchema), async (c) => {
     }
   }
 
+  const placementChanged =
+    (body.orderIndex !== undefined && body.orderIndex !== existing.orderIndex) ||
+    (body.collectionId !== undefined && body.collectionId !== existing.collectionId);
+
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   if (body.title !== undefined) updates.title = body.title;
   if (body.url !== undefined) updates.url = body.url;
@@ -273,6 +291,18 @@ bookmarkRoutes.put('/:id', zValidator('json', updateSchema), async (c) => {
   if (body.collectionId !== undefined) updates.collectionId = body.collectionId;
 
   const [updated] = await db.update(bookmarks).set(updates).where(eq(bookmarks.id, id)).returning();
+
+  if (placementChanged) {
+    const spaceIds = new Set<string>();
+    const fromSpace = await spaceIdForCollection(db, existing.collectionId);
+    if (fromSpace) spaceIds.add(fromSpace);
+    if (body.collectionId && body.collectionId !== existing.collectionId) {
+      const toSpace = await spaceIdForCollection(db, body.collectionId);
+      if (toSpace) spaceIds.add(toSpace);
+    }
+    for (const sid of spaceIds) await invalidateSpace(sid);
+  }
+
   return c.json({ bookmark: updated });
 });
 
