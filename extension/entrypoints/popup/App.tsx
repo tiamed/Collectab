@@ -270,7 +270,9 @@ export default function App() {
             >
               {spaces.length === 0 && <option value="">No spaces</option>}
               {spaces.map((s) => (
-                <option key={s.id} value={s.id}>{s.name}</option>
+                <option key={s.id} value={s.id}>
+                  {s.isShared && s.ownerName ? `${s.name} (from ${s.ownerName})` : s.name}
+                </option>
               ))}
             </select>
             <ChevronDown className="pointer-events-none absolute right-2 top-1/2 size-3 -translate-y-1/2 text-[var(--muted)]" />

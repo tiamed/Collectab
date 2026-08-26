@@ -1,9 +1,9 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
-import { eq, asc, and, isNull } from 'drizzle-orm';
+import { eq, asc, and, isNull, not } from 'drizzle-orm';
 import { z } from 'zod';
 import { getDb } from '../../database/client.js';
-import { spaces, spaceMembers, orgMembers, organizations } from '../../database/schema.js';
+import { spaces, spaceMembers, orgMembers, organizations, users } from '../../database/schema.js';
 import { authMiddleware, type AuthEnv } from '../middleware/auth.js';
 import { getEffectiveRole } from './permissions.js';
 
@@ -56,13 +56,17 @@ spaceRoutes.get('/', async (c) => {
     .orderBy(asc(spaces.orderIndex));
 
   const shared = await db
-    .select({ space: spaces })
+    .select({ space: spaces, ownerName: users.name })
     .from(spaceMembers)
     .innerJoin(spaces, eq(spaceMembers.spaceId, spaces.id))
-    .where(and(eq(spaceMembers.userId, userId), isNull(spaces.orgId)))
+    .innerJoin(users, eq(users.id, spaces.ownerId))
+    .where(and(eq(spaceMembers.userId, userId), isNull(spaces.orgId), not(eq(spaces.ownerId, userId))))
     .orderBy(asc(spaces.orderIndex));
 
-  const allSpaces = [...owned, ...shared.map((s) => s.space)];
+  const allSpaces = [
+    ...owned.map((s) => ({ ...s, isShared: false })),
+    ...shared.map(({ space, ownerName }) => ({ ...space, isShared: true, ownerName })),
+  ];
 
   return c.json({ spaces: allSpaces });
 });

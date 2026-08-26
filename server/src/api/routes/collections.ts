@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { getDb } from '../../database/client.js';
 import { collections, spaces, organizations, orgMembers } from '../../database/schema.js';
 import { authMiddleware, type AuthEnv } from '../middleware/auth.js';
-import { canEditSpace } from './permissions.js';
+import { canEditSpace, getEffectiveRole } from './permissions.js';
 
 const createSchema = z.object({
   spaceId: z.string().uuid(),
@@ -31,30 +31,26 @@ collectionRoutes.get('/', async (c) => {
   const spaceId = c.req.query('spaceId');
 
   if (spaceId) {
-    // Check if this space belongs to an org the user has access to
     const [space] = await db.select().from(spaces).where(eq(spaces.id, spaceId));
     if (!space) return c.json({ collections: [] });
 
-    if (space.orgId) {
-      // Org space: verify user is org owner or member
+    // Owner, space member (shared personal/org), or org member may list all collections in the space
+    const role = await getEffectiveRole(db, space, userId);
+    if (!role) {
+      if (!space.orgId) {
+        return c.json({ error: 'No access' }, 403);
+      }
+      // Legacy: org members without a space_members row can still view
       const [org] = await db.select().from(organizations).where(eq(organizations.id, space.orgId));
       const [membership] = await db.select().from(orgMembers)
         .where(and(eq(orgMembers.orgId, space.orgId), eq(orgMembers.userId, userId)));
-
       if (!org || (org.ownerId !== userId && !membership)) {
         return c.json({ error: 'No access' }, 403);
       }
-
-      // Return all collections in this space (regardless of owner)
-      const result = await db.select().from(collections)
-        .where(eq(collections.spaceId, spaceId))
-        .orderBy(asc(collections.orderIndex));
-      return c.json({ collections: result });
     }
 
-    // Personal space: only show own collections
     const result = await db.select().from(collections)
-      .where(and(eq(collections.ownerId, userId), eq(collections.spaceId, spaceId)))
+      .where(eq(collections.spaceId, spaceId))
       .orderBy(asc(collections.orderIndex));
     return c.json({ collections: result });
   }

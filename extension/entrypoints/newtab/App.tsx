@@ -663,6 +663,14 @@ export default function App() {
           spaceId={activeSpaceId}
           spaceName={activeSpace?.name ?? ''}
           isOrgSpace={!!activeOrgId}
+          parentOrgId={activeOrgId}
+          parentOrgName={activeOrg?.name}
+          canAddOrgMembers={activeOrg?.role === 'owner' || activeOrg?.role === 'admin'}
+          onOpenOrgMembers={
+            activeOrg
+              ? () => setMembersModal({ type: 'org', orgId: activeOrg.id, orgName: activeOrg.name })
+              : undefined
+          }
           onClose={() => setMembersModal(null)}
           canChangeRoles
         />

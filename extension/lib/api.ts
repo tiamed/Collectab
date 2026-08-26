@@ -241,6 +241,8 @@ export interface Space {
   ownerId: string;
   orgId?: string | null;
   createdAt: string;
+  isShared?: boolean;
+  ownerName?: string;
 }
 
 export async function getSpaces(orgId?: string | null): Promise<Space[]> {

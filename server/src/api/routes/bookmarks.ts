@@ -10,17 +10,8 @@ import { canEditSpace } from './permissions.js';
 async function hasCollectionAccess(db: ReturnType<typeof getDb>, collectionId: string, userId: string): Promise<boolean> {
   const [col] = await db.select().from(collections).where(eq(collections.id, collectionId));
   if (!col) return false;
-  if (col.ownerId === userId) return true;
-
-  const [space] = await db.select().from(spaces).where(eq(spaces.id, col.spaceId));
-  if (!space?.orgId) return false;
-
-  const [org] = await db.select().from(organizations).where(eq(organizations.id, space.orgId));
-  if (org?.ownerId === userId) return true;
-
-  const [membership] = await db.select().from(orgMembers)
-    .where(and(eq(orgMembers.orgId, space.orgId), eq(orgMembers.userId, userId)));
-  return !!membership;
+  // Shared personal spaces: invitees access via space_members (same as space-level bookmark fetch)
+  return hasSpaceAccess(db, col.spaceId, userId);
 }
 
 async function hasSpaceAccess(db: ReturnType<typeof getDb>, spaceId: string, userId: string): Promise<boolean> {
