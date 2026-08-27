@@ -15,6 +15,7 @@ import ConfirmModal from '@/components/ConfirmModal';
 import DeleteOrgModal from '@/components/DeleteOrgModal';
 import { useOrganizations, useSpaces, useCollections, useCollectionBookmarks } from '@/hooks/useApi';
 import { useAuth } from '@/hooks/useAuth';
+import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { useTheme } from '@/hooks/useTheme';
 import { loadApiBase, isLoggedIn, createCollection, createSpace, createOrganization, updateOrganization, deleteOrganization, updateSpace, deleteSpace, deleteAllSpaces, updateCollection, deleteCollection } from '@/lib/api';
 import type { Bookmark, User, Organization, Space, Collection } from '@/lib/api';
@@ -108,6 +109,7 @@ export default function App() {
 
   const { user, loading: authLoading, login, register, logout } = useAuth(ready, bootUser);
   const { theme, toggle: toggleTheme } = useTheme();
+  const { browserOnline, available } = useOnlineStatus();
 
   const sessionUser = user ?? bootUser;
   const loggedIn = !!sessionUser;
@@ -143,6 +145,7 @@ export default function App() {
   const crdtOrderRef = useRef<CrdtOrderManager | null>(null);
   const bookmarksRef = useRef(bookmarksByCollection);
   const collectionsRef = useRef(collections);
+  const wasUnavailableRef = useRef(false);
   bookmarksRef.current = bookmarksByCollection;
   collectionsRef.current = collections;
 
@@ -152,10 +155,19 @@ export default function App() {
   const removedIdsRef = useRef<Set<string>>(new Set());
 
   const applyCrdtOrderToUi = useCallback((mgr: CrdtOrderManager) => {
+    const cols = collectionsRef.current;
+    const bks = bookmarksRef.current;
+    const colIds = new Set(cols.map((c) => c.id));
+    const bkKeys = Object.keys(bks);
+    // Space switch can leave collections from B and bookmarks from A in refs
+    // for a tick; reconciling that against the new CRDT snapshot writes empty
+    // lists into the new space and flashes the UI.
+    if (bkKeys.length > 0 && !bkKeys.some((k) => colIds.has(k))) return;
+
     const reconciled = reconcileCrdtOrder(
       mgr,
-      collectionsRef.current,
-      bookmarksRef.current,
+      cols,
+      bks,
       removedIdsRef.current,
     );
     for (const [colId, merged] of Object.entries(reconciled)) {
@@ -166,7 +178,7 @@ export default function App() {
   // CRDT WS lives in the newtab page (not MV3 SW) — Port to background often fails with
   // "Receiving end does not exist" when the service worker is asleep/unloaded.
   useEffect(() => {
-    if (!activeSpaceId || !loggedIn) return;
+    if (!activeSpaceId || !loggedIn || !available) return;
 
     const mgr = new CrdtOrderManager();
     const client = new CrdtSyncClient();
@@ -197,7 +209,20 @@ export default function App() {
       client.disconnect();
       crdtOrderRef.current = null;
     };
-  }, [activeSpaceId, loggedIn, applyCrdtOrderToUi]);
+  }, [activeSpaceId, loggedIn, available, applyCrdtOrderToUi]);
+
+  useEffect(() => {
+    if (!available) {
+      wasUnavailableRef.current = true;
+      return;
+    }
+    if (!wasUnavailableRef.current || !loggedIn) return;
+    wasUnavailableRef.current = false;
+    void refetchOrgs();
+    void refetchSpaces();
+    void refetchCollections();
+    void refetchBookmarks();
+  }, [available, loggedIn, refetchOrgs, refetchSpaces, refetchCollections, refetchBookmarks]);
 
   // REST bootstrap only after bookmarks are loaded (avoid empty CRDT lists that break move()).
   useEffect(() => {
@@ -572,7 +597,18 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen w-full bg-[var(--background)]">
+    <div className="flex h-screen w-full flex-col bg-[var(--background)]">
+      {loggedIn && !available && (
+        <div
+          role="status"
+          className="shrink-0 border-b border-[var(--border)] bg-[var(--background)] px-3 py-1.5 text-center text-[11px] leading-tight text-[var(--muted)]"
+        >
+          {browserOnline
+            ? "Can't reach server — showing cached data. Changes won't save until the server is back"
+            : "Offline — showing cached data. Changes won't save until you're back online"}
+        </div>
+      )}
+      <div className="flex min-h-0 flex-1">
       <Sidebar
         orgs={orgs}
         activeOrgId={activeOrgId}
@@ -644,6 +680,7 @@ export default function App() {
           canEditContent={canEditContent}
         />
       </main>
+      </div>
 
       {showSettings && (
         <SettingsModal

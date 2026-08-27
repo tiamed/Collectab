@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { X, Upload, Download } from 'lucide-react';
 import { getApiBase, setApiBase, importFromNiceTab, importFromToby, importNative, exportData } from '@/lib/api';
+import { reportServerReachable, reportServerUnreachable } from '@/lib/serverReachability';
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -40,6 +41,7 @@ export default function SettingsModal({ onClose, onImportDone, onServerChanged, 
       const { changed, hadSession } = await setApiBase(trimmed);
       const res = await fetch(trimmed.replace(/\/api$/, '') + '/health', { signal: controller.signal });
       if (res.ok) {
+        reportServerReachable();
         setLatency(Math.round(performance.now() - start));
         setStatus('success');
         if (changed && hadSession) {
@@ -50,6 +52,7 @@ export default function SettingsModal({ onClose, onImportDone, onServerChanged, 
         setStatus('error');
       }
     } catch {
+      reportServerUnreachable();
       setStatus('error');
     } finally {
       clearTimeout(timer);

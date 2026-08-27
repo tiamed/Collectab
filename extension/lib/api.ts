@@ -1,4 +1,11 @@
 import { clearDataCache, hasCachedData } from './dataCache';
+import {
+  configureHealthUrl,
+  isAbortError,
+  isNetworkFailure,
+  reportServerReachable,
+  reportServerUnreachable,
+} from './serverReachability';
 
 const STORAGE_KEY_BASE_URL = 'api_base_url';
 const STORAGE_KEY_ACCESS_TOKEN = 'access_token';
@@ -15,6 +22,8 @@ const DEFAULT_API_BASE = 'http://localhost:3001/api';
 let apiBase: string = DEFAULT_API_BASE;
 let accessToken: string | null = null;
 let refreshToken: string | null = null;
+
+configureHealthUrl(() => apiBase.replace(/\/api\/?$/, '') + '/health');
 
 export async function loadApiBase() {
   const stored = await chrome.storage.local.get([STORAGE_KEY_BASE_URL, STORAGE_KEY_ACCESS_TOKEN, STORAGE_KEY_REFRESH_TOKEN]);
@@ -86,10 +95,21 @@ async function clearTokens() {
   await chrome.storage.local.remove([STORAGE_KEY_ACCESS_TOKEN, STORAGE_KEY_REFRESH_TOKEN]);
 }
 
+async function trackedFetch(url: string, init?: RequestInit): Promise<Response> {
+  try {
+    const res = await fetch(url, init);
+    reportServerReachable();
+    return res;
+  } catch (e) {
+    if (!isAbortError(e) && isNetworkFailure(e)) reportServerUnreachable();
+    throw e;
+  }
+}
+
 async function tryRefreshToken(): Promise<boolean> {
   if (!refreshToken) return false;
   try {
-    const res = await fetch(`${apiBase}/auth/refresh`, {
+    const res = await trackedFetch(`${apiBase}/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refreshToken }),
@@ -115,7 +135,7 @@ async function request<T>(path: string, options: RequestInit = {}, retry = true)
     headers['Authorization'] = `Bearer ${accessToken}`;
   }
 
-  const res = await fetch(`${apiBase}${path}`, { ...options, headers });
+  const res = await trackedFetch(`${apiBase}${path}`, { ...options, headers });
 
   if (res.status === 204) return undefined as T;
 
@@ -289,9 +309,12 @@ export interface Collection {
   updatedAt: string;
 }
 
-export async function getCollections(spaceId?: string): Promise<Collection[]> {
+export async function getCollections(spaceId?: string, signal?: AbortSignal): Promise<Collection[]> {
   const query = spaceId ? `?spaceId=${spaceId}` : '';
-  const data = await request<{ collections: Collection[] }>(`/collections${query}`);
+  const data = await request<{ collections: Collection[] }>(
+    `/collections${query}`,
+    signal ? { signal } : {},
+  );
   return data.collections;
 }
 
@@ -341,9 +364,13 @@ export async function getBookmarks(collectionId: string): Promise<Bookmark[]> {
   return data.bookmarks;
 }
 
-export async function getBookmarksBySpace(spaceId: string): Promise<Record<string, Bookmark[]>> {
+export async function getBookmarksBySpace(
+  spaceId: string,
+  signal?: AbortSignal,
+): Promise<Record<string, Bookmark[]>> {
   const data = await request<{ bookmarksByCollection: Record<string, Bookmark[]> }>(
     `/bookmarks?spaceId=${encodeURIComponent(spaceId)}`,
+    signal ? { signal } : {},
   );
   return data.bookmarksByCollection;
 }
