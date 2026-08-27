@@ -1,11 +1,11 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
-import { eq, and, asc, sql } from 'drizzle-orm';
+import { eq, asc, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { getDb } from '../../database/client.js';
-import { bookmarks, collections, spaces, organizations, orgMembers, spaceMembers } from '../../database/schema.js';
+import { bookmarks, collections, spaces } from '../../database/schema.js';
 import { authMiddleware, type AuthEnv } from '../middleware/auth.js';
-import { canEditSpace } from './permissions.js';
+import { canEditSpace, hasSpaceAccess } from './permissions.js';
 import { invalidateSpace } from '../../server/space-invalidate.js';
 
 async function spaceIdForCollection(
@@ -21,27 +21,13 @@ async function spaceIdForCollection(
 async function hasCollectionAccess(db: ReturnType<typeof getDb>, collectionId: string, userId: string): Promise<boolean> {
   const [col] = await db.select().from(collections).where(eq(collections.id, collectionId));
   if (!col) return false;
-  // Shared personal spaces: invitees access via space_members (same as space-level bookmark fetch)
-  return hasSpaceAccess(db, col.spaceId, userId);
+  const [space] = await db.select().from(spaces).where(eq(spaces.id, col.spaceId));
+  return hasSpaceAccess(db, space, userId);
 }
 
-async function hasSpaceAccess(db: ReturnType<typeof getDb>, spaceId: string, userId: string): Promise<boolean> {
+async function spaceHasAccess(db: ReturnType<typeof getDb>, spaceId: string, userId: string): Promise<boolean> {
   const [space] = await db.select().from(spaces).where(eq(spaces.id, spaceId));
-  if (!space) return false;
-  if (space.ownerId === userId) return true;
-
-  const [sm] = await db.select().from(spaceMembers)
-    .where(and(eq(spaceMembers.spaceId, spaceId), eq(spaceMembers.userId, userId)));
-  if (sm) return true;
-
-  if (!space.orgId) return false;
-
-  const [org] = await db.select().from(organizations).where(eq(organizations.id, space.orgId));
-  if (org?.ownerId === userId) return true;
-
-  const [membership] = await db.select().from(orgMembers)
-    .where(and(eq(orgMembers.orgId, space.orgId), eq(orgMembers.userId, userId)));
-  return !!membership;
+  return hasSpaceAccess(db, space, userId);
 }
 
 /** Resolve collection → space and require owner|editor for writes */
@@ -111,7 +97,7 @@ bookmarkRoutes.get('/', async (c) => {
   }
 
   if (spaceId) {
-    if (!(await hasSpaceAccess(db, spaceId, userId))) {
+    if (!(await spaceHasAccess(db, spaceId, userId))) {
       return c.json({ error: 'Space not found' }, 404);
     }
 

@@ -38,14 +38,39 @@ spaceRoutes.get('/', async (c) => {
       return c.json({ error: 'No access to this organization' }, 403);
     }
 
-    // Return all spaces in this org
+    // Org members may open the org; they only see spaces they were invited to
+    // (or created). The org owner sees every space.
     const orgSpaces = await db
       .select()
       .from(spaces)
       .where(eq(spaces.orgId, orgId))
       .orderBy(asc(spaces.orderIndex));
 
-    return c.json({ spaces: orgSpaces });
+    if (org.ownerId === userId) {
+      return c.json({
+        spaces: orgSpaces.map((s) => ({ ...s, myRole: 'owner' as const })),
+      });
+    }
+
+    const memberRows = await db
+      .select({ spaceId: spaceMembers.spaceId, role: spaceMembers.role })
+      .from(spaceMembers)
+      .where(eq(spaceMembers.userId, userId));
+    const roleBySpace = new Map(memberRows.map((r) => [r.spaceId, r.role]));
+
+    const visible = orgSpaces
+      .map((s) => {
+        let myRole: 'owner' | 'editor' | 'viewer' | null = null;
+        if (s.ownerId === userId) myRole = 'owner';
+        else {
+          const r = roleBySpace.get(s.id);
+          if (r === 'owner' || r === 'editor' || r === 'viewer') myRole = r;
+        }
+        return myRole ? { ...s, myRole } : null;
+      })
+      .filter((s): s is NonNullable<typeof s> => s !== null);
+
+    return c.json({ spaces: visible });
   }
 
   // No orgId: return user's personal spaces (no org) + shared spaces
@@ -56,7 +81,7 @@ spaceRoutes.get('/', async (c) => {
     .orderBy(asc(spaces.orderIndex));
 
   const shared = await db
-    .select({ space: spaces, ownerName: users.name })
+    .select({ space: spaces, ownerName: users.name, role: spaceMembers.role })
     .from(spaceMembers)
     .innerJoin(spaces, eq(spaceMembers.spaceId, spaces.id))
     .innerJoin(users, eq(users.id, spaces.ownerId))
@@ -64,8 +89,16 @@ spaceRoutes.get('/', async (c) => {
     .orderBy(asc(spaces.orderIndex));
 
   const allSpaces = [
-    ...owned.map((s) => ({ ...s, isShared: false })),
-    ...shared.map(({ space, ownerName }) => ({ ...space, isShared: true, ownerName })),
+    ...owned.map((s) => ({ ...s, isShared: false, myRole: 'owner' as const })),
+    ...shared.map(({ space, ownerName, role }) => ({
+      ...space,
+      isShared: true,
+      ownerName,
+      myRole: (role === 'owner' || role === 'editor' || role === 'viewer' ? role : 'viewer') as
+        | 'owner'
+        | 'editor'
+        | 'viewer',
+    })),
   ];
 
   return c.json({ spaces: allSpaces });
@@ -133,7 +166,7 @@ spaceRoutes.post('/', zValidator('json', createSchema), async (c) => {
     return created;
   });
 
-  return c.json({ space }, 201);
+  return c.json({ space: { ...space, myRole: 'owner' as const } }, 201);
 });
 
 spaceRoutes.put('/:id', zValidator('json', updateSchema), async (c) => {

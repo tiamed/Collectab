@@ -171,11 +171,11 @@ export default function MembersModal({
 
         {isOrgMode ? (
           <p className="mb-3 text-[10px] text-[var(--muted)]">
-            Org members can be granted access to spaces. New org members are not added to existing spaces automatically.
+            Org members cannot see a space until they are invited to it. Inviting someone to the org does not add them to existing spaces.
           </p>
         ) : isOrgSpace ? (
           <p className="mb-3 text-[10px] text-[var(--muted)]">
-            People must be in the organization before you can invite them here. Editor can edit; viewer is read-only.
+            People must be in the organization before you can invite them here. They will not see this space until invited. Editor can edit; viewer is read-only.
             {onOpenOrgMembers && (
               <>
                 {' '}

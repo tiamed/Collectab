@@ -246,18 +246,18 @@ export default function App() {
   const activeSpace = spaces.find((s) => s.id === activeSpaceId);
   const activeOrg = orgs.find((o) => o.id === activeOrgId);
 
-  // Derive UI permissions from org role + space ownership (server remains the backstop)
-  const isSpaceOwner = !!activeSpace && (
-    activeSpace.ownerId === sessionUser?.id || activeOrg?.role === 'owner'
-  );
-  const canEditContent = isSpaceOwner || activeOrg?.role === 'admin';
+  // Space-level role from GET /spaces. Org membership alone is not enough.
+  const mySpaceRole = activeSpace?.myRole
+    ?? (activeSpace?.ownerId === sessionUser?.id || activeOrg?.role === 'owner' ? 'owner' : null);
+  const isSpaceOwner = mySpaceRole === 'owner';
+  const canEditContent = mySpaceRole === 'owner' || mySpaceRole === 'editor';
   // TopBar manages space members — space owners only (org or personal)
   const canManageSpaceMembers = isSpaceOwner;
   const canManageSpace = isSpaceOwner;
   const canChangeOrgRoles = activeOrg?.role === 'owner';
   const canCreateSpace = !activeOrgId || activeOrg?.role === 'owner' || activeOrg?.role === 'admin';
   const canManageSpaceFn = (space: Space) =>
-    space.ownerId === sessionUser?.id || activeOrg?.role === 'owner';
+    space.myRole === 'owner' || space.ownerId === sessionUser?.id || activeOrg?.role === 'owner';
 
   const allTags = useMemo(() => {
     const tags = new Set<string>();

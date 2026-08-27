@@ -80,9 +80,8 @@ async function main() {
     const r = await pool.query(
       `SELECT 1 FROM spaces s
        LEFT JOIN space_members sm ON sm.space_id = s.id AND sm.user_id = $2
-       LEFT JOIN org_members om ON om.org_id = s.org_id AND om.user_id = $2
        WHERE s.id = $1
-         AND (s.owner_id = $2 OR sm.user_id = $2 OR om.user_id = $2
+         AND (s.owner_id = $2 OR sm.user_id = $2
               OR s.org_id IN (SELECT id FROM organizations WHERE owner_id = $2))`,
       [spaceId, userId],
     );

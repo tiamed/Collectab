@@ -1,9 +1,9 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
-import { eq, and, asc } from 'drizzle-orm';
+import { eq, asc } from 'drizzle-orm';
 import { z } from 'zod';
 import { getDb } from '../../database/client.js';
-import { collections, spaces, organizations, orgMembers } from '../../database/schema.js';
+import { collections, spaces } from '../../database/schema.js';
 import { authMiddleware, type AuthEnv } from '../middleware/auth.js';
 import { canEditSpace, getEffectiveRole } from './permissions.js';
 
@@ -37,16 +37,7 @@ collectionRoutes.get('/', async (c) => {
     // Owner, space member (shared personal/org), or org member may list all collections in the space
     const role = await getEffectiveRole(db, space, userId);
     if (!role) {
-      if (!space.orgId) {
-        return c.json({ error: 'No access' }, 403);
-      }
-      // Legacy: org members without a space_members row can still view
-      const [org] = await db.select().from(organizations).where(eq(organizations.id, space.orgId));
-      const [membership] = await db.select().from(orgMembers)
-        .where(and(eq(orgMembers.orgId, space.orgId), eq(orgMembers.userId, userId)));
-      if (!org || (org.ownerId !== userId && !membership)) {
-        return c.json({ error: 'No access' }, 403);
-      }
+      return c.json({ error: 'No access' }, 403);
     }
 
     const result = await db.select().from(collections)
