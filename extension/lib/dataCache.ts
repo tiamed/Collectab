@@ -1,3 +1,4 @@
+import { browser } from 'wxt/browser';
 import type { Space, Collection, Bookmark, User, Organization } from './api';
 
 const CACHE_KEY = 'data_cache_v2';
@@ -35,8 +36,13 @@ let loaded = false;
 let loadPromise: Promise<void> | null = null;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
-function chromeLocal() {
-  return globalThis.chrome?.storage?.local;
+function getStorageLocal() {
+  const browserStorage = (browser as unknown as { storage?: { local?: typeof browser.storage.local } })
+    ?.storage?.local;
+  if (browserStorage) return browserStorage;
+  const chromeStorage = (globalThis as unknown as { chrome?: { storage?: { local?: typeof browser.storage.local } } })
+    .chrome?.storage?.local;
+  return chromeStorage;
 }
 
 function getEntry<T>(record: Record<string, CacheEntry<T>>, key: string): T | null {
@@ -54,8 +60,8 @@ function pruneRecord<T>(record: Record<string, CacheEntry<T>>, max: number) {
 }
 
 function scheduleSave(immediate = false): Promise<void> {
-  const storage = chromeLocal();
-  if (!storage) return Promise.resolve();
+  const storageLocal = getStorageLocal();
+  if (!storageLocal) return Promise.resolve();
   if (saveTimer) clearTimeout(saveTimer);
 
   const write = () => {
@@ -63,7 +69,7 @@ function scheduleSave(immediate = false): Promise<void> {
     pruneRecord(memory.spaces, MAX_SPACES);
     pruneRecord(memory.collections, MAX_COLLECTION_SETS);
     pruneRecord(memory.bookmarksBySpace, MAX_BOOKMARK_SPACES);
-    return storage.set({ [CACHE_KEY]: memory }).catch(() => {});
+    return storageLocal.set({ [CACHE_KEY]: memory }).catch(() => {});
   };
 
   if (immediate) {
@@ -95,9 +101,9 @@ export async function clearDataCache(): Promise<void> {
   memory = emptyCache();
   loaded = true;
   loadPromise = null;
-  const storage = chromeLocal();
-  if (storage) {
-    await storage.remove([CACHE_KEY, 'data_cache_v1']).catch(() => {});
+  const storageLocal = getStorageLocal();
+  if (storageLocal) {
+    await storageLocal.remove([CACHE_KEY, 'data_cache_v1']).catch(() => {});
   }
 }
 
@@ -106,9 +112,9 @@ export async function ensureDataCacheLoaded() {
   if (loadPromise) return loadPromise;
   loadPromise = (async () => {
     try {
-      const storage = chromeLocal();
-      if (storage) {
-        const stored = await storage.get([CACHE_KEY, 'data_cache_v1']);
+      const storageLocal = getStorageLocal();
+      if (storageLocal) {
+        const stored = await storageLocal.get([CACHE_KEY, 'data_cache_v1']);
         if (stored[CACHE_KEY]) {
           memory = { ...emptyCache(), ...stored[CACHE_KEY] };
           if (!memory.bookmarksBySpace) memory.bookmarksBySpace = {};
@@ -126,7 +132,7 @@ export async function ensureDataCacheLoaded() {
             bookmarksBySpace: {},
           };
           scheduleSave();
-          storage.remove('data_cache_v1').catch(() => {});
+          storageLocal.remove('data_cache_v1').catch(() => {});
         }
       }
     } catch {

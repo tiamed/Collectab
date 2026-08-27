@@ -26,15 +26,19 @@ let refreshToken: string | null = null;
 configureHealthUrl(() => apiBase.replace(/\/api\/?$/, '') + '/health');
 
 export async function loadApiBase() {
-  const stored = await chrome.storage.local.get([STORAGE_KEY_BASE_URL, STORAGE_KEY_ACCESS_TOKEN, STORAGE_KEY_REFRESH_TOKEN]);
+  const stored = (await browser.storage.local.get([
+    STORAGE_KEY_BASE_URL,
+    STORAGE_KEY_ACCESS_TOKEN,
+    STORAGE_KEY_REFRESH_TOKEN,
+  ])) as Record<string, string | undefined>;
   if (stored[STORAGE_KEY_BASE_URL]) {
-    apiBase = stored[STORAGE_KEY_BASE_URL];
+    apiBase = stored[STORAGE_KEY_BASE_URL] as string;
   }
   if (stored[STORAGE_KEY_ACCESS_TOKEN]) {
-    accessToken = stored[STORAGE_KEY_ACCESS_TOKEN];
+    accessToken = stored[STORAGE_KEY_ACCESS_TOKEN] as string;
   }
   if (stored[STORAGE_KEY_REFRESH_TOKEN]) {
-    refreshToken = stored[STORAGE_KEY_REFRESH_TOKEN];
+    refreshToken = stored[STORAGE_KEY_REFRESH_TOKEN] as string;
   }
 }
 
@@ -46,15 +50,15 @@ export async function setApiBase(url: string): Promise<{ changed: boolean; hadSe
   const next = url.replace(/\/+$/, '');
   const changed = next !== apiBase;
   apiBase = next;
-  await chrome.storage.local.set({ [STORAGE_KEY_BASE_URL]: apiBase });
+  await browser.storage.local.set({ [STORAGE_KEY_BASE_URL]: apiBase });
 
   let hadSession = false;
   if (changed) {
-    const before = await chrome.storage.local.get([
+    const before = (await browser.storage.local.get([
       STORAGE_KEY_ACCESS_TOKEN,
       STORAGE_KEY_REFRESH_TOKEN,
       ...SESSION_UI_KEYS,
-    ]);
+    ])) as Record<string, string | undefined>;
     hadSession =
       !!before[STORAGE_KEY_ACCESS_TOKEN] ||
       !!before[STORAGE_KEY_REFRESH_TOKEN] ||
@@ -62,7 +66,7 @@ export async function setApiBase(url: string): Promise<{ changed: boolean; hadSe
       hasCachedData();
     await clearTokens();
     await clearDataCache();
-    await chrome.storage.local.remove([...SESSION_UI_KEYS]);
+    await browser.storage.local.remove([...SESSION_UI_KEYS]);
   }
 
   return { changed, hadSession };
@@ -83,7 +87,7 @@ export function isLoggedIn() {
 async function persistTokens(access: string, refresh: string) {
   accessToken = access;
   refreshToken = refresh;
-  await chrome.storage.local.set({
+  await browser.storage.local.set({
     [STORAGE_KEY_ACCESS_TOKEN]: access,
     [STORAGE_KEY_REFRESH_TOKEN]: refresh,
   });
@@ -92,7 +96,7 @@ async function persistTokens(access: string, refresh: string) {
 async function clearTokens() {
   accessToken = null;
   refreshToken = null;
-  await chrome.storage.local.remove([STORAGE_KEY_ACCESS_TOKEN, STORAGE_KEY_REFRESH_TOKEN]);
+  await browser.storage.local.remove([STORAGE_KEY_ACCESS_TOKEN, STORAGE_KEY_REFRESH_TOKEN]);
 }
 
 async function trackedFetch(url: string, init?: RequestInit): Promise<Response> {

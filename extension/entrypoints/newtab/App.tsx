@@ -36,20 +36,20 @@ export default function App() {
 
   const setActiveOrgId = (id: string | null) => {
     setActiveOrgIdRaw(id);
-    if (id) chrome.storage.local.set({ [STORAGE_KEY_ORG]: id });
-    else chrome.storage.local.remove(STORAGE_KEY_ORG);
+    if (id) browser.storage.local.set({ [STORAGE_KEY_ORG]: id });
+    else browser.storage.local.remove(STORAGE_KEY_ORG);
   };
 
   const setActiveSpaceId = (id: string | null) => {
     setActiveSpaceIdRaw(id);
-    if (id) chrome.storage.local.set({ [STORAGE_KEY_SPACE]: id });
-    else chrome.storage.local.remove(STORAGE_KEY_SPACE);
+    if (id) browser.storage.local.set({ [STORAGE_KEY_SPACE]: id });
+    else browser.storage.local.remove(STORAGE_KEY_SPACE);
   };
   const [personalName, setPersonalNameRaw] = useState('Personal');
 
   const setPersonalName = (name: string) => {
     setPersonalNameRaw(name);
-    chrome.storage.local.set({ [STORAGE_KEY_PERSONAL_NAME]: name });
+    browser.storage.local.set({ [STORAGE_KEY_PERSONAL_NAME]: name });
   };
 
   const [tagFilter, setTagFilter] = useState<string | null>(null);
@@ -97,11 +97,12 @@ export default function App() {
     Promise.all([
       loadApiBase(),
       ensureDataCacheLoaded(),
-      chrome.storage.local.get([STORAGE_KEY_ORG, STORAGE_KEY_SPACE, STORAGE_KEY_PERSONAL_NAME]),
+      browser.storage.local.get([STORAGE_KEY_ORG, STORAGE_KEY_SPACE, STORAGE_KEY_PERSONAL_NAME]),
     ]).then(([, , stored]) => {
-      if (stored[STORAGE_KEY_ORG]) setActiveOrgIdRaw(stored[STORAGE_KEY_ORG]);
-      if (stored[STORAGE_KEY_SPACE]) setActiveSpaceIdRaw(stored[STORAGE_KEY_SPACE]);
-      if (stored[STORAGE_KEY_PERSONAL_NAME]) setPersonalNameRaw(stored[STORAGE_KEY_PERSONAL_NAME]);
+      const s = stored as Record<string, string | undefined>;
+      if (s[STORAGE_KEY_ORG]) setActiveOrgIdRaw(s[STORAGE_KEY_ORG] as string);
+      if (s[STORAGE_KEY_SPACE]) setActiveSpaceIdRaw(s[STORAGE_KEY_SPACE] as string);
+      if (s[STORAGE_KEY_PERSONAL_NAME]) setPersonalNameRaw(s[STORAGE_KEY_PERSONAL_NAME] as string);
       if (isLoggedIn()) setBootUser(getCachedUser());
       setReady(true);
     });
